@@ -24,12 +24,30 @@ const COLORS = {
   playerBg: '#181818',
 };
 
+const LoopIcon = ({ active }: { active: boolean }) => (
+  <View style={styles.loopIconContainer}>
+    <View
+      style={[
+        styles.loopIconRing,
+        active && styles.loopIconRingActive,
+      ]}
+    />
+    <View
+      style={[
+        styles.loopIconArrow,
+        active && styles.loopIconArrowActive,
+      ]}
+    />
+  </View>
+);
+
 type Song = { id: string; title: string; artist: string; duration: string };
 
 export default function HomeScreen() {
   const navigation = useNavigation<HomeScreenNavigationProp>();
   const [searchText, setSearchText] = useState('');
   const [songs, setSongs] = useState<Song[]>([]);
+  const [isLooping, setIsLooping] = useState(false);
 
   const handleSearch = () => {
     Keyboard.dismiss();
@@ -118,6 +136,15 @@ export default function HomeScreen() {
             <TouchableOpacity onPress={() => console.log('Próxima')}>
               <Text style={styles.controlBtn}>⏭</Text>
             </TouchableOpacity>
+            <TouchableOpacity
+              style={[
+                styles.loopBtn,
+                isLooping && styles.loopBtnActive,
+              ]}
+              onPress={() => setIsLooping(!isLooping)}
+            >
+              <LoopIcon active={isLooping} />
+            </TouchableOpacity>
           </View>
 
           <View style={styles.progressRow}>
@@ -167,6 +194,56 @@ const styles = StyleSheet.create({
   playerControls: { alignItems: 'center', gap: 8 },
   playerButtons: { flexDirection: 'row', alignItems: 'center', gap: 28 },
   controlBtn: { fontSize: 20, color: COLORS.subtext },
+  loopBtn: {
+    width: 28,
+    height: 28,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  loopBtnActive: {
+    backgroundColor: COLORS.primary,
+    borderRadius: 14,
+  },
+  loopIconContainer: {
+    width: 20,
+    height: 20,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  loopIconRing: {
+    position: 'absolute',
+    width: 20,
+    height: 20,
+    borderWidth: 2,
+    borderColor: COLORS.subtext,
+    borderRadius: 10,
+    borderTopWidth: 0,
+    borderRightWidth: 0,
+    transform: [{ rotate: '45deg' }],
+  },
+  loopIconRingActive: {
+    borderColor: COLORS.bg,
+  },
+  loopIconArrow: {
+    position: 'absolute',
+    width: 0,
+    height: 0,
+    borderLeftWidth: 5,
+    borderTopWidth: 5,
+    borderRightWidth: 5,
+    borderBottomWidth: 5,
+    borderStyle: 'solid',
+    borderLeftColor: 'transparent',
+    borderTopColor: COLORS.subtext,
+    borderRightColor: 'transparent',
+    borderBottomColor: 'transparent',
+    transform: [{ rotate: '45deg' }],
+    top: -2,
+    left: 5,
+  },
+  loopIconArrowActive: {
+    borderTopColor: COLORS.bg,
+  },
   mainPlayBtn: { width: 48, height: 48, borderRadius: 24, backgroundColor: COLORS.primary, justifyContent: 'center', alignItems: 'center' },
   mainPlayIcon: { fontSize: 18, color: COLORS.bg, marginLeft: 2 },
   progressRow: { flexDirection: 'row', alignItems: 'center', gap: 8, width: '100%' },
