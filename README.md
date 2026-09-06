@@ -267,7 +267,10 @@ Passo a passo do que acontece hoje (com a etapa de extração **simulada**):
 | **Reprodução de áudio** | Real, via `expo-audio` (`play/pause/parar/seek/loop`, segue tocando ao trocar de tela, background playback). | — |
 | **Importação** | Real: `expo-document-picker` (arquivos, copiados para o app) e Storage Access Framework via `expo-file-system` (pasta, Android). | Varredura recursiva de subpastas. |
 | **Persistência** | `AsyncStorage` (`src/storage/persist.ts`): biblioteca, tempo ouvido e pasta escolhida sobrevivem ao fechar/abrir o app. | — |
-| **Arquivo indisponível** | Detectado no boot e antes de tocar (`refreshAvailability`); item marcado como _Indisponível_ e não quebra o app. | — |
+| **Arquivo indisponível** | Detectado no boot e antes de tocar (`refreshAvailability`); item marcado como _Indisponível_. Removível pelo menu da faixa. | — |
+| **Editar / remover faixa** | Menu por faixa (toque no `⋯` ou pressione e segure): renomear ou remover. Remover apaga a cópia no app; **não** mexe nos arquivos da sua pasta (SAF). | — |
+| **Sem duplicatas** | O mesmo arquivo (nome + tamanho em bytes) não entra duas vezes — vale para arquivos, pasta, compartilhados e download. | Hash de conteúdo (md5) para pegar renomeados. |
+| **Notificação de mídia** | Notificação/tela de bloqueio com título, play/pause e seek (`expo-audio` lock screen + `POST_NOTIFICATIONS`). | Botões de faixa anterior/próxima (a API de player único do expo-audio não expõe). |
 | **Formatos** | MP3, M4A, WAV, AAC, OGG, OPUS, FLAC (detecção por extensão real). | Metadados ID3 (capa, artista). |
 | **Trazer músicas de outros apps** | **Compartilhar → Sondfy**: qualquer app que compartilhe um arquivo de áudio (ex.: **NewPipe**) manda direto para a biblioteca (via `expo-share-intent`). Robusto — quem lida com o YouTube é o outro app. | — |
 | **Download por link dentro do app** | Opcional, via **servidor pessoal** com yt-dlp (pasta [`server/`](server/README.md)). Configure a URL em Configurações → Servidor de download. Sem servidor, a seção fica escondida. | Frágil: quando o YouTube muda algo, refaça o deploy do servidor. |

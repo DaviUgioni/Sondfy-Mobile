@@ -13,7 +13,9 @@ import {
   LocalTrackInput,
   SharedFile,
   copySharedFilesToLibrary,
+  deleteAppFile,
   downloadFromServer,
+  isAppOwnedUri,
   isUriAvailable,
   pickAudioFiles,
   pickAudioFolder,
@@ -41,6 +43,10 @@ export type DownloadedTrack = {
   durationSec: number;
   format: string;
   sizeMB: number;
+  /** Tamanho exato em bytes (para detectar duplicatas). */
+  sizeBytes?: number;
+  /** Chave de conteúdo (nome do arquivo + bytes) — impede o mesmo arquivo entrar 2x. */
+  dedupKey?: string;
   addedAt: number;
   /** Quantas vezes o usuário reproduziu esta faixa. */
   playCount: number;
@@ -96,10 +102,13 @@ type LibraryValue = {
   refreshAvailability: () => Promise<void>;
   /** Grava a duração real assim que o player a descobre. */
   updateTrackDuration: (id: string, durationSec: number) => void;
+  /** Renomeia uma faixa (só o nome exibido; o arquivo no disco não muda). */
+  renameTrack: (id: string, title: string) => void;
   /** Compat: faixa "baixada" pelo downloader legado (simulado). */
   addDownload: (input: LegacyDownloadInput) => DownloadedTrack;
   registerPlay: (id: string) => void;
   addListenedSeconds: (seconds: number) => void;
+  /** Remove a faixa da biblioteca. Apaga o arquivo do disco só se for cópia do app. */
   removeDownload: (id: string) => void;
 };
 
@@ -121,6 +130,8 @@ function inputToTrack(input: LocalTrackInput): DownloadedTrack {
     durationSec: input.durationSec && input.durationSec > 0 ? Math.round(input.durationSec) : 0,
     format: input.format,
     sizeMB: input.sizeMB,
+    sizeBytes: input.sizeBytes,
+    dedupKey: input.dedupKey,
     addedAt: Date.now(),
     playCount: 0,
   };
@@ -170,19 +181,34 @@ export function LibraryProvider({ children }: { children: React.ReactNode }) {
   const mergeTracks = useCallback((incoming: DownloadedTrack[]) => {
     let added = 0;
     let duplicates = 0;
+    const orphanCopies: string[] = []; // cópias no app que ficaram órfãs por serem duplicadas
     setDownloads((prev) => {
       const byId = new Map(prev.map((d) => [d.id, d]));
+      const keyToId = new Map(
+        prev.filter((d) => d.dedupKey).map((d) => [d.dedupKey as string, d.id])
+      );
       for (const t of incoming) {
-        if (byId.has(t.id)) {
+        const existingId =
+          (byId.has(t.id) && t.id) ||
+          (t.dedupKey && keyToId.get(t.dedupKey)) ||
+          null;
+
+        if (existingId) {
           duplicates += 1;
-          // Reaparecer = arquivo voltou a existir: limpa o "missing".
-          byId.set(t.id, { ...byId.get(t.id)!, missing: false });
+          const cur = byId.get(existingId)!;
+          byId.set(existingId, { ...cur, missing: false });
+          // Mesmo conteúdo já na biblioteca: descarta a nova cópia do disco.
+          if (t.uri !== cur.uri && isAppOwnedUri(t.uri)) orphanCopies.push(t.uri);
         } else {
           byId.set(t.id, t);
+          if (t.dedupKey) keyToId.set(t.dedupKey, t.id);
           added += 1;
         }
       }
       return Array.from(byId.values()).sort((a, b) => b.addedAt - a.addedAt);
+    });
+    orphanCopies.forEach((uri) => {
+      deleteAppFile(uri).catch(() => undefined);
     });
     return { added, duplicates };
   }, []);
@@ -295,6 +321,14 @@ export function LibraryProvider({ children }: { children: React.ReactNode }) {
     );
   }, []);
 
+  const renameTrack = useCallback<LibraryValue['renameTrack']>((id, title) => {
+    const clean = title.trim();
+    if (!clean) return;
+    setDownloads((prev) =>
+      prev.map((d) => (d.id === id ? { ...d, title: clean.slice(0, 200) } : d))
+    );
+  }, []);
+
   const addDownload = useCallback<LibraryValue['addDownload']>((input) => {
     const track: DownloadedTrack = {
       ...input,
@@ -321,7 +355,15 @@ export function LibraryProvider({ children }: { children: React.ReactNode }) {
   }, []);
 
   const removeDownload = useCallback((id: string) => {
-    setDownloads((prev) => prev.filter((d) => d.id !== id));
+    setDownloads((prev) => {
+      const target = prev.find((d) => d.id === id);
+      // Apaga a cópia do disco só quando o arquivo pertence ao app (não mexe
+      // nos arquivos da pasta do usuário / SAF).
+      if (target && isAppOwnedUri(target.uri)) {
+        deleteAppFile(target.uri).catch(() => undefined);
+      }
+      return prev.filter((d) => d.id !== id);
+    });
   }, []);
 
   const stats = useMemo<LibraryStats>(() => {
@@ -344,6 +386,7 @@ export function LibraryProvider({ children }: { children: React.ReactNode }) {
     importSharedFiles,
     refreshAvailability,
     updateTrackDuration,
+    renameTrack,
     addDownload,
     registerPlay,
     addListenedSeconds,

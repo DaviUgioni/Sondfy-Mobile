@@ -7,15 +7,28 @@ import React, {
   useRef,
   useState,
 } from 'react';
-import { Alert } from 'react-native';
+import { Alert, Platform } from 'react-native';
 import {
   AudioPlayer,
   AudioStatus,
   createAudioPlayer,
+  requestNotificationPermissionsAsync,
   setAudioModeAsync,
 } from 'expo-audio';
 
 import { DownloadedTrack, useLibrary } from '../library/LibraryContext';
+
+/** Metadados mostrados na notificação / tela de bloqueio. */
+function lockScreenMeta(t: DownloadedTrack) {
+  const artworkUrl =
+    t.thumbnailUrl && /^https?:\/\//i.test(t.thumbnailUrl) ? t.thumbnailUrl : undefined;
+  return {
+    title: t.title,
+    artist: t.folderPath || 'Sondfy',
+    albumTitle: 'Sondfy',
+    artworkUrl,
+  };
+}
 
 type PlayerContextValue = {
   /** null quando nada foi selecionado para tocar. */
@@ -73,6 +86,36 @@ export function PlayerProvider({ children }: { children: React.ReactNode }) {
   const trackRef = useRef<DownloadedTrack | null>(null);
   const loopingRef = useRef(false);
   const durationRef = useRef(0);
+  const lockActive = useRef(false);
+
+  /** Liga/atualiza a notificação com controles de mídia (play/pause/seek). */
+  const syncLockScreen = useCallback((t: DownloadedTrack) => {
+    const player = playerRef.current;
+    if (!player) return;
+    try {
+      if (!lockActive.current) {
+        player.setActiveForLockScreen(true, lockScreenMeta(t), {
+          showSeekForward: true,
+          showSeekBackward: true,
+        });
+        lockActive.current = true;
+      } else {
+        player.updateLockScreenMetadata(lockScreenMeta(t));
+      }
+    } catch (err) {
+      console.warn('[player] lock screen:', err);
+    }
+  }, []);
+
+  const clearLockScreen = useCallback(() => {
+    if (!lockActive.current) return;
+    try {
+      playerRef.current?.clearLockScreenControls();
+    } catch (err) {
+      console.warn('[player] clear lock screen:', err);
+    }
+    lockActive.current = false;
+  }, []);
 
   const ordered = useMemo(
     () => [...downloads].sort((a, b) => b.addedAt - a.addedAt),
@@ -110,6 +153,7 @@ export function PlayerProvider({ children }: { children: React.ReactNode }) {
         setDurationSec(t.durationSec || 0);
         durationRef.current = t.durationSec || 0;
         registerPlay(t.id);
+        syncLockScreen(t);
         // Rede de segurança: se em 15s nada carregou, mostra erro (sem crashar).
         loadTimeout.current = setTimeout(() => {
           if (!playerRef.current?.isLoaded) {
@@ -127,7 +171,7 @@ export function PlayerProvider({ children }: { children: React.ReactNode }) {
         );
       }
     },
-    [registerPlay]
+    [registerPlay, syncLockScreen]
   );
 
   const advanceAuto = useCallback(() => {
@@ -156,6 +200,13 @@ export function PlayerProvider({ children }: { children: React.ReactNode }) {
       shouldPlayInBackground: true,
       interruptionMode: 'doNotMix',
     }).catch((err) => console.warn('[player] setAudioModeAsync:', err));
+
+    // Notificação de mídia no Android 13+ precisa da permissão de notificações.
+    if (Platform.OS === 'android') {
+      requestNotificationPermissionsAsync().catch((err) =>
+        console.warn('[player] requestNotificationPermissions:', err)
+      );
+    }
 
     const sub = player.addListener('playbackStatusUpdate', (status: AudioStatus) => {
       setPlaying(status.playing);
@@ -188,6 +239,7 @@ export function PlayerProvider({ children }: { children: React.ReactNode }) {
     return () => {
       sub.remove();
       if (loadTimeout.current) clearTimeout(loadTimeout.current);
+      clearLockScreen();
       // A instância de áudio é mantida viva de propósito: só é liberada quando
       // o app inteiro é encerrado. Assim sobrevive a remounts (ex.: StrictMode).
     };
@@ -212,6 +264,7 @@ export function PlayerProvider({ children }: { children: React.ReactNode }) {
       } catch {
         /* noop */
       }
+      clearLockScreen();
       setTrack(null);
       trackRef.current = null;
       setPlaying(false);
@@ -220,8 +273,10 @@ export function PlayerProvider({ children }: { children: React.ReactNode }) {
     if (fresh !== track) {
       setTrack(fresh);
       trackRef.current = fresh;
+      // Renome/alteração da faixa atual -> atualiza a notificação de mídia.
+      if (lockActive.current) syncLockScreen(fresh);
     }
-  }, [downloads, track]);
+  }, [downloads, track, syncLockScreen]);
 
   const playTrack = useCallback((t: DownloadedTrack) => load(t), [load]);
 
@@ -271,9 +326,10 @@ export function PlayerProvider({ children }: { children: React.ReactNode }) {
 
   const dismiss = useCallback(() => {
     stop();
+    clearLockScreen();
     setTrack(null);
     trackRef.current = null;
-  }, [stop]);
+  }, [stop, clearLockScreen]);
 
   const next = useCallback(() => {
     const list = orderedRef.current;

@@ -38,6 +38,10 @@ export type LocalTrackInput = {
   format: string;
   /** Tamanho em MB (0 quando o SO não informa). */
   sizeMB: number;
+  /** Tamanho exato em bytes (0 quando desconhecido) — usado para detectar duplicatas. */
+  sizeBytes: number;
+  /** Chave de conteúdo: mesmo arquivo importado de novo => mesma chave. */
+  dedupKey: string;
   origin: ImportOrigin;
   /** Pasta de origem (rótulo legível) — só informativo. */
   folderPath: string;
@@ -47,6 +51,26 @@ export type LocalTrackInput = {
 
 /** Diretório do app onde ficam as cópias dos arquivos avulsos importados. */
 const MUSIC_DIR = `${FileSystem.documentDirectory ?? ''}music/`;
+
+/** Chave de deduplicação por conteúdo: nome real do arquivo + tamanho em bytes. */
+export function makeDedupKey(fileName: string, sizeBytes: number): string {
+  return `${(fileName || '').trim().toLowerCase()}|${sizeBytes || 0}`;
+}
+
+/** true se o URI aponta para uma cópia dentro do app (seguro apagar ao remover a faixa). */
+export function isAppOwnedUri(uri: string): boolean {
+  return !!uri && !!FileSystem.documentDirectory && uri.startsWith(FileSystem.documentDirectory);
+}
+
+/** Apaga um arquivo que é cópia do app. Não faz nada para URIs externos (SAF). */
+export async function deleteAppFile(uri: string): Promise<void> {
+  if (!isAppOwnedUri(uri)) return;
+  try {
+    await FileSystem.deleteAsync(uri, { idempotent: true });
+  } catch (err) {
+    console.warn('[import] não consegui apagar a cópia:', err);
+  }
+}
 
 async function ensureMusicDir(): Promise<void> {
   try {
@@ -78,6 +102,16 @@ async function uniqueDestination(fileName: string): Promise<string> {
 function toMB(bytes?: number): number {
   if (!bytes || bytes <= 0) return 0;
   return Math.round((bytes / (1024 * 1024)) * 10) / 10;
+}
+
+/** Tamanho em bytes de um URI (0 se não der para saber). */
+async function fileSize(uri: string): Promise<number> {
+  try {
+    const info = await FileSystem.getInfoAsync(uri);
+    return info.exists && info.size ? info.size : 0;
+  } catch {
+    return 0;
+  }
 }
 
 /**
@@ -117,22 +151,16 @@ export async function pickAudioFiles(): Promise<LocalTrackInput[]> {
       console.warn('[import] falha ao copiar; usando URI original:', fileName, err);
     }
 
-    let sizeMB = toMB(asset.size);
-    if (!sizeMB) {
-      try {
-        const info = await FileSystem.getInfoAsync(finalUri);
-        if (info.exists && info.size) sizeMB = toMB(info.size);
-      } catch {
-        /* tamanho é opcional */
-      }
-    }
+    const sizeBytes = asset.size && asset.size > 0 ? asset.size : await fileSize(finalUri);
 
     out.push({
       uri: finalUri,
       title: displayTitleFromFileName(fileName),
       fileName,
       format: formatLabel(fileName),
-      sizeMB,
+      sizeMB: toMB(sizeBytes),
+      sizeBytes,
+      dedupKey: makeDedupKey(fileName, sizeBytes),
       origin: 'file',
       folderPath: 'Arquivos importados',
     });
@@ -169,19 +197,15 @@ export async function pickAudioFolder(): Promise<FolderImportResult | null> {
   const tracks: LocalTrackInput[] = [];
   for (const uri of audioUris) {
     const fileName = fileNameFromUri(uri);
-    let sizeMB = 0;
-    try {
-      const info = await FileSystem.getInfoAsync(uri);
-      if (info.exists && info.size) sizeMB = toMB(info.size);
-    } catch {
-      /* tamanho é opcional para content:// */
-    }
+    const sizeBytes = await fileSize(uri);
     tracks.push({
       uri,
       title: displayTitleFromFileName(fileName),
       fileName,
       format: formatLabel(fileName),
-      sizeMB,
+      sizeMB: toMB(sizeBytes),
+      sizeBytes,
+      dedupKey: makeDedupKey(fileName, sizeBytes),
       origin: 'folder',
       folderPath: folderLabelFromUri(dirUri),
     });
@@ -274,21 +298,16 @@ export async function downloadFromServer(opts: {
     // se o move falhar, seguimos com o arquivo temporário mesmo.
   }
   const finalUri = (await FileSystem.getInfoAsync(dest)).exists ? dest : tmp;
-
-  let sizeMB = 0;
-  try {
-    const info = await FileSystem.getInfoAsync(finalUri);
-    if (info.exists && info.size) sizeMB = toMB(info.size);
-  } catch {
-    /* tamanho é opcional */
-  }
+  const sizeBytes = await fileSize(finalUri);
 
   return {
     uri: finalUri,
     title,
     fileName,
     format: formatLabel(fileName),
-    sizeMB,
+    sizeMB: toMB(sizeBytes),
+    sizeBytes,
+    dedupKey: makeDedupKey(fileName, sizeBytes),
     origin: 'youtube',
     folderPath: 'Baixadas',
     durationSec,
@@ -332,20 +351,16 @@ export async function copySharedFilesToLibrary(files: SharedFile[]): Promise<Loc
       console.warn('[share] falha ao copiar; usando URI original:', name, err);
     }
 
-    let sizeMB = 0;
-    try {
-      const info = await FileSystem.getInfoAsync(finalUri);
-      if (info.exists && info.size) sizeMB = toMB(info.size);
-    } catch {
-      /* tamanho é opcional */
-    }
+    const sizeBytes = await fileSize(finalUri);
 
     out.push({
       uri: finalUri,
       title: displayTitleFromFileName(name),
       fileName: name,
       format: formatLabel(name),
-      sizeMB,
+      sizeMB: toMB(sizeBytes),
+      sizeBytes,
+      dedupKey: makeDedupKey(name, sizeBytes),
       origin: 'file',
       folderPath: 'Compartilhadas',
     });

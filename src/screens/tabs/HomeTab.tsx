@@ -1,12 +1,13 @@
-import React, { useEffect, useMemo, useRef } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { View, Text, TouchableOpacity, ScrollView, StyleSheet, Alert } from 'react-native';
 import { colors, spacing, typography, layout } from '../../theme';
 import CoverArt from '../../components/CoverArt';
 import QualityTag from '../../components/QualityTag';
 import EqualizerBars from '../../components/EqualizerBars';
 import EmptyState from '../../components/EmptyState';
-import { DownloadedBadge, GearIcon, PlayIcon, FolderIcon, PlusIcon } from '../../components/Icon';
-import { useLibrary } from '../../library/LibraryContext';
+import TrackEditModal from '../../components/TrackEditModal';
+import { DownloadedBadge, GearIcon, PlayIcon, FolderIcon, PlusIcon, MoreIcon } from '../../components/Icon';
+import { useLibrary, DownloadedTrack } from '../../library/LibraryContext';
 import { usePlayer } from '../../player/PlayerContext';
 import { useSettings } from '../../settings/SettingsContext';
 import { formatTime } from '../../utils/time';
@@ -17,11 +18,12 @@ type Props = {
 };
 
 export default function HomeTab({ onOpenImport, onOpenSettings }: Props) {
-  const { downloads } = useLibrary();
+  const { downloads, renameTrack, removeDownload } = useLibrary();
   const { track: current, playing, playTrack } = usePlayer();
   const { folder } = useSettings();
   const listRef = useRef<ScrollView>(null);
   const folderLabel = folder?.label ?? 'Dispositivo';
+  const [editing, setEditing] = useState<DownloadedTrack | null>(null);
 
   // Mais recente sempre no topo.
   const ordered = useMemo(
@@ -90,6 +92,8 @@ export default function HomeTab({ onOpenImport, onOpenSettings }: Props) {
                 style={styles.row}
                 activeOpacity={0.7}
                 onPress={onPress}
+                onLongPress={() => setEditing(t)}
+                delayLongPress={280}
               >
                 <CoverArt uri={t.thumbnailUrl} size={52} />
                 <View style={styles.info}>
@@ -133,11 +137,25 @@ export default function HomeTab({ onOpenImport, onOpenSettings }: Props) {
                     <PlayIcon size={12} color={colors.textMuted} />
                   </View>
                 )}
+                <TouchableOpacity
+                  onPress={() => setEditing(t)}
+                  hitSlop={10}
+                  style={styles.moreBtn}
+                >
+                  <MoreIcon size={18} color={colors.textMuted} />
+                </TouchableOpacity>
               </TouchableOpacity>
             );
           })}
         </ScrollView>
       )}
+
+      <TrackEditModal
+        track={editing}
+        onClose={() => setEditing(null)}
+        onRename={renameTrack}
+        onRemove={removeDownload}
+      />
     </View>
   );
 }
@@ -157,6 +175,7 @@ const styles = StyleSheet.create({
   folderRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.xs, marginTop: 3 },
   subtitle: { color: colors.textMuted, ...typography.caption, flexShrink: 1 },
   gear: { padding: spacing.xs },
+  moreBtn: { paddingHorizontal: spacing.xs, paddingVertical: spacing.sm },
   row: {
     flexDirection: 'row',
     alignItems: 'center',

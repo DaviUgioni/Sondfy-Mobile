@@ -12,6 +12,7 @@
     },
     "android": {
       "package": "com.sondfy.mobile",
+      "permissions": ["android.permission.POST_NOTIFICATIONS"],
       "adaptiveIcon": {
         "backgroundColor": "#1ED760",
         "foregroundImage": "./assets/sondfy-icon-adaptive.png"

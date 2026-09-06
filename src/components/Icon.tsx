@@ -195,6 +195,18 @@ export const GearIcon = ({ size = 22, active, color }: IconProps) => {
   );
 };
 
+/** Três pontos — menu de opções da faixa. */
+export const MoreIcon = ({ size = 20, color = colors.textMuted }: IconProps) => {
+  const dot = Math.max(2, size * 0.16);
+  return (
+    <View style={{ width: size, height: size, alignItems: 'center', justifyContent: 'center', gap: dot * 0.7 }}>
+      {[0, 1, 2].map((i) => (
+        <View key={i} style={{ width: dot, height: dot, borderRadius: dot / 2, backgroundColor: color }} />
+      ))}
+    </View>
+  );
+};
+
 export const PlusIcon = ({ size = 20, color = colors.text }: IconProps) => (
   <View style={{ width: size, height: size, alignItems: 'center', justifyContent: 'center' }}>
     <View style={{ position: 'absolute', width: size, height: 2, borderRadius: 2, backgroundColor: color }} />
