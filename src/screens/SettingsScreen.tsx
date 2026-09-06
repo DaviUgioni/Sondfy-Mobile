@@ -1,85 +1,146 @@
 import React from 'react';
-import { StyleSheet, Text, View, TouchableOpacity } from 'react-native';
+import { StyleSheet, Text, View, TouchableOpacity, ScrollView } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import { useNavigation } from '@react-navigation/native';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 
-type RootStackParamList = {
-  Home: undefined;
-  Settings: undefined;
-};
+import { colors, spacing, radius, typography } from '../theme';
+import GradientBackground from '../components/GradientBackground';
+import { ChevronRight, FolderIcon } from '../components/Icon';
+import { AUDIO_FORMATS, useSettings } from '../settings/SettingsContext';
 
-type SettingsScreenNavigationProp = NativeStackNavigationProp<RootStackParamList, 'Settings'>;
-
-const COLORS = {
-  bg: '#121212',
-  card: '#1e1e1e',
-  primary: '#1db954',
-  text: '#ffffff',
-  subtext: '#b3b3b3',
-  muted: '#727272',
-  border: '#2a2a2a',
-};
+type RootStackParamList = { Main: undefined; Settings: undefined; FolderPicker: undefined };
+type Nav = NativeStackNavigationProp<RootStackParamList, 'Settings'>;
 
 export default function SettingsScreen() {
-  const navigation = useNavigation<SettingsScreenNavigationProp>();
+  const navigation = useNavigation<Nav>();
+  const { folder, defaultFormat, setDefaultFormat } = useSettings();
 
   return (
-    <View style={styles.container}>
-      <View style={styles.header}>
-        <TouchableOpacity onPress={() => navigation.goBack()} style={styles.backBtn}>
-          <Text style={styles.backText}>← Voltar</Text>
-        </TouchableOpacity>
-        <Text style={styles.title}>Configurações</Text>
-      </View>
-
-      <View style={styles.content}>
-        <View style={styles.section}>
-          <Text style={styles.sectionTitle}>Conta</Text>
-          <TouchableOpacity style={styles.settingsRow}>
-            <Text style={styles.settingsLabel}>Gerenciar conta</Text>
-            <Text style={styles.chevron}>›</Text>
+    <GradientBackground tint={colors.bgGradientTop}>
+      <SafeAreaView style={styles.safe} edges={['top', 'bottom']}>
+        <View style={styles.header}>
+          <TouchableOpacity onPress={() => navigation.goBack()} style={styles.backBtn} hitSlop={8}>
+            <View style={styles.backChevron}>
+              <ChevronRight size={16} color={colors.text} />
+            </View>
           </TouchableOpacity>
-          <TouchableOpacity style={styles.settingsRow}>
-            <Text style={styles.settingsLabel}>Sair</Text>
-            <Text style={styles.chevron}>›</Text>
-          </TouchableOpacity>
+          <Text style={styles.title}>Configurações</Text>
+          <View style={styles.backBtn} />
         </View>
 
-        <View style={styles.section}>
-          <Text style={styles.sectionTitle}>App</Text>
-          <TouchableOpacity style={styles.settingsRow}>
-            <Text style={styles.settingsLabel}>Tema</Text>
-            <Text style={styles.settingsValue}>Escuro</Text>
-          </TouchableOpacity>
-          <TouchableOpacity style={styles.settingsRow}>
-            <Text style={styles.settingsLabel}>Idioma</Text>
-            <Text style={styles.settingsValue}>Português</Text>
-          </TouchableOpacity>
-        </View>
+        <ScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
+          <Section title="Downloads">
+            <TouchableOpacity
+              style={styles.row}
+              activeOpacity={0.7}
+              onPress={() => navigation.navigate('FolderPicker')}
+            >
+              <View style={styles.rowLeft}>
+                <FolderIcon size={18} color={colors.textMuted} />
+                <Text style={styles.rowLabel}>Pasta no dispositivo</Text>
+              </View>
+              <View style={styles.rowRight}>
+                <Text style={styles.rowValue}>{folder.label}</Text>
+                <ChevronRight />
+              </View>
+            </TouchableOpacity>
 
-        <View style={styles.section}>
-          <Text style={styles.sectionTitle}>Sobre</Text>
-          <TouchableOpacity style={styles.settingsRow}>
-            <Text style={styles.settingsLabel}>Versão</Text>
-            <Text style={styles.settingsValue}>1.0.0</Text>
-          </TouchableOpacity>
-        </View>
-      </View>
+            <View style={[styles.row, styles.rowColumn]}>
+              <Text style={styles.rowLabel}>Formato padrão do download</Text>
+              <View style={styles.segment}>
+                {AUDIO_FORMATS.map((f) => {
+                  const active = f === defaultFormat;
+                  return (
+                    <TouchableOpacity
+                      key={f}
+                      style={[styles.segmentItem, active && styles.segmentItemActive]}
+                      onPress={() => setDefaultFormat(f)}
+                    >
+                      <Text style={[styles.segmentText, active && styles.segmentTextActive]}>{f}</Text>
+                    </TouchableOpacity>
+                  );
+                })}
+              </View>
+            </View>
+          </Section>
+
+          <Section title="Sobre">
+            <View style={styles.row}>
+              <Text style={styles.rowLabel}>Versão</Text>
+              <Text style={styles.rowValue}>1.0.0</Text>
+            </View>
+          </Section>
+        </ScrollView>
+      </SafeAreaView>
+    </GradientBackground>
+  );
+}
+
+function Section({ title, children }: { title: string; children: React.ReactNode }) {
+  return (
+    <View style={styles.section}>
+      <Text style={styles.sectionTitle}>{title}</Text>
+      <View style={styles.sectionCard}>{children}</View>
     </View>
   );
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: COLORS.bg },
-  header: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 20, paddingTop: 10, paddingBottom: 16, borderBottomWidth: 1, borderBottomColor: COLORS.border },
-  backBtn: { paddingVertical: 8 },
-  backText: { fontSize: 16, color: COLORS.primary, fontWeight: '600' },
-  title: { fontSize: 20, fontWeight: '700', color: COLORS.text, flex: 1, textAlign: 'center', marginLeft: -40 },
-  content: { flex: 1, paddingHorizontal: 16, paddingTop: 24 },
-  section: { marginBottom: 32 },
-  sectionTitle: { fontSize: 13, fontWeight: '600', color: COLORS.muted, textTransform: 'uppercase', letterSpacing: 0.5, marginBottom: 12, marginLeft: 4 },
-  settingsRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', backgroundColor: COLORS.card, borderRadius: 12, paddingHorizontal: 16, paddingVertical: 16, marginBottom: 8 },
-  settingsLabel: { fontSize: 16, color: COLORS.text },
-  settingsValue: { fontSize: 16, color: COLORS.subtext },
-  chevron: { fontSize: 18, color: COLORS.muted },
+  safe: { flex: 1 },
+  header: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingHorizontal: spacing.lg,
+    paddingVertical: spacing.md,
+  },
+  backBtn: { width: 36, height: 36, alignItems: 'center', justifyContent: 'center' },
+  backChevron: { transform: [{ rotate: '180deg' }] },
+  title: { color: colors.text, ...typography.section },
+  content: { paddingHorizontal: spacing.lg, paddingBottom: spacing.xxxl, paddingTop: spacing.sm },
+  section: { marginBottom: spacing.xxl },
+  sectionTitle: {
+    color: colors.textFaint,
+    ...typography.caption,
+    textTransform: 'uppercase',
+    letterSpacing: 0.6,
+    marginBottom: spacing.sm,
+    marginLeft: spacing.xs,
+  },
+  sectionCard: {
+    backgroundColor: colors.card,
+    borderRadius: radius.card,
+    overflow: 'hidden',
+  },
+  row: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingHorizontal: spacing.lg,
+    paddingVertical: spacing.lg,
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    borderBottomColor: colors.border,
+    minHeight: 56,
+  },
+  rowColumn: { flexDirection: 'column', alignItems: 'stretch', gap: spacing.md },
+  rowLeft: { flexDirection: 'row', alignItems: 'center', gap: spacing.md },
+  rowLabel: { color: colors.text, ...typography.body },
+  rowRight: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm },
+  rowValue: { color: colors.textMuted, ...typography.body },
+  segment: {
+    flexDirection: 'row',
+    backgroundColor: colors.surface,
+    borderRadius: radius.pill,
+    padding: 3,
+  },
+  segmentItem: {
+    flex: 1,
+    paddingVertical: spacing.sm,
+    borderRadius: radius.pill,
+    alignItems: 'center',
+  },
+  segmentItemActive: { backgroundColor: colors.primary },
+  segmentText: { color: colors.textMuted, ...typography.caption, fontWeight: '700' },
+  segmentTextActive: { color: colors.black },
 });

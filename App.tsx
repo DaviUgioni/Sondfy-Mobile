@@ -1,27 +1,61 @@
 import React from 'react';
-import { NavigationContainer } from '@react-navigation/native';
+import { NavigationContainer, DefaultTheme } from '@react-navigation/native';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
+import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { StatusBar } from 'expo-status-bar';
-import HomeScreen from './src/screens/HomeScreen';
+
+import { colors } from './src/theme';
+import { SettingsProvider } from './src/settings/SettingsContext';
+import { LibraryProvider } from './src/library/LibraryContext';
+import { PlayerProvider } from './src/player/PlayerContext';
+import MainScreen from './src/screens/MainScreen';
 import SettingsScreen from './src/screens/SettingsScreen';
+import FolderPickerScreen from './src/screens/FolderPickerScreen';
+import PlayerScreen from './src/screens/PlayerScreen';
 
 const Stack = createNativeStackNavigator();
 
+const navTheme = {
+  ...DefaultTheme,
+  dark: true,
+  colors: {
+    ...DefaultTheme.colors,
+    background: colors.bg,
+    card: colors.bg,
+    text: colors.text,
+    border: colors.border,
+    primary: colors.primary,
+  },
+};
+
 export default function App() {
   return (
-    <>
-      <StatusBar barStyle="light-content" backgroundColor="#121212" />
-      <NavigationContainer>
-        <Stack.Navigator
-          screenOptions={{
-            headerShown: false,
-            contentStyle: { backgroundColor: '#121212' },
-          }}
-        >
-          <Stack.Screen name="Home" component={HomeScreen} />
-          <Stack.Screen name="Settings" component={SettingsScreen} />
-        </Stack.Navigator>
-      </NavigationContainer>
-    </>
+    <SafeAreaProvider>
+      <StatusBar style="light" />
+      <SettingsProvider>
+        <LibraryProvider>
+          <PlayerProvider>
+            <NavigationContainer theme={navTheme}>
+              <Stack.Navigator
+                screenOptions={{
+                  headerShown: false,
+                  contentStyle: { backgroundColor: colors.bg },
+                  animation: 'slide_from_right',
+                }}
+              >
+                <Stack.Screen name="Main" component={MainScreen} />
+                <Stack.Screen name="Settings" component={SettingsScreen} />
+                <Stack.Screen name="FolderPicker" component={FolderPickerScreen} />
+                <Stack.Screen
+                  name="Player"
+                  component={PlayerScreen}
+                  options={{ presentation: 'modal', animation: 'slide_from_bottom' }}
+                />
+              </Stack.Navigator>
+            </NavigationContainer>
+          </PlayerProvider>
+        </LibraryProvider>
+      </SettingsProvider>
+    </SafeAreaProvider>
   );
 }
