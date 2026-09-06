@@ -1,21 +1,21 @@
 {
   "expo": {
-    "name": "Sondfy-Mobile",
+    "name": "Sondfy",
     "slug": "Sondfy-Mobile",
     "version": "1.0.0",
     "orientation": "portrait",
-    "icon": "./assets/icon.png",
+    "scheme": "sondfy",
+    "icon": "./assets/sondfy-icon.png",
     "userInterfaceStyle": "light",
     "ios": {
       "supportsTablet": true
     },
     "android": {
       "package": "com.sondfy.mobile",
+      "permissions": ["android.permission.POST_NOTIFICATIONS"],
       "adaptiveIcon": {
-        "backgroundColor": "#E6F4FE",
-        "foregroundImage": "./assets/android-icon-foreground.png",
-        "backgroundImage": "./assets/android-icon-background.png",
-        "monochromeImage": "./assets/android-icon-monochrome.png"
+        "backgroundColor": "#1ED760",
+        "foregroundImage": "./assets/sondfy-icon-adaptive.png"
       },
       "predictiveBackGestureEnabled": false
     },
@@ -35,7 +35,14 @@
           "recordAudioAndroid": false
         }
       ],
-      "expo-asset"
+      "expo-asset",
+      [
+        "expo-share-intent",
+        {
+          "androidIntentFilters": ["audio/*"],
+          "disableIOS": true
+        }
+      ]
     ]
   }
 }

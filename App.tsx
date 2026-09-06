@@ -3,11 +3,13 @@ import { NavigationContainer, DefaultTheme } from '@react-navigation/native';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { StatusBar } from 'expo-status-bar';
+import { ShareIntentProvider } from 'expo-share-intent';
 
 import { colors } from './src/theme';
 import { SettingsProvider } from './src/settings/SettingsContext';
 import { LibraryProvider } from './src/library/LibraryContext';
 import { PlayerProvider } from './src/player/PlayerContext';
+import ShareIntentBridge from './src/share/ShareIntentBridge';
 import MainScreen from './src/screens/MainScreen';
 import SettingsScreen from './src/screens/SettingsScreen';
 import FolderPickerScreen from './src/screens/FolderPickerScreen';
@@ -30,12 +32,14 @@ const navTheme = {
 
 export default function App() {
   return (
-    <SafeAreaProvider>
-      <StatusBar style="light" />
-      <SettingsProvider>
-        <LibraryProvider>
-          <PlayerProvider>
-            <NavigationContainer theme={navTheme}>
+    <ShareIntentProvider>
+      <SafeAreaProvider>
+        <StatusBar style="light" />
+        <SettingsProvider>
+          <LibraryProvider>
+            <ShareIntentBridge />
+            <PlayerProvider>
+              <NavigationContainer theme={navTheme}>
               <Stack.Navigator
                 screenOptions={{
                   headerShown: false,
@@ -51,11 +55,12 @@ export default function App() {
                   component={PlayerScreen}
                   options={{ presentation: 'modal', animation: 'slide_from_bottom' }}
                 />
-              </Stack.Navigator>
-            </NavigationContainer>
-          </PlayerProvider>
-        </LibraryProvider>
-      </SettingsProvider>
-    </SafeAreaProvider>
+                </Stack.Navigator>
+              </NavigationContainer>
+            </PlayerProvider>
+          </LibraryProvider>
+        </SettingsProvider>
+      </SafeAreaProvider>
+    </ShareIntentProvider>
   );
 }

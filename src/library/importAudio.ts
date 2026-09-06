@@ -24,7 +24,7 @@ import {
   safeFileName,
 } from '../utils/audioFile';
 
-export type ImportOrigin = 'file' | 'folder';
+export type ImportOrigin = 'file' | 'folder' | 'youtube';
 
 /** Dados de uma faixa local prontos para entrar na biblioteca. */
 export type LocalTrackInput = {
@@ -38,13 +38,39 @@ export type LocalTrackInput = {
   format: string;
   /** Tamanho em MB (0 quando o SO não informa). */
   sizeMB: number;
+  /** Tamanho exato em bytes (0 quando desconhecido) — usado para detectar duplicatas. */
+  sizeBytes: number;
+  /** Chave de conteúdo: mesmo arquivo importado de novo => mesma chave. */
+  dedupKey: string;
   origin: ImportOrigin;
   /** Pasta de origem (rótulo legível) — só informativo. */
   folderPath: string;
+  /** Duração em segundos, quando a origem já informa (ex.: download por link). */
+  durationSec?: number;
 };
 
 /** Diretório do app onde ficam as cópias dos arquivos avulsos importados. */
 const MUSIC_DIR = `${FileSystem.documentDirectory ?? ''}music/`;
+
+/** Chave de deduplicação por conteúdo: nome real do arquivo + tamanho em bytes. */
+export function makeDedupKey(fileName: string, sizeBytes: number): string {
+  return `${(fileName || '').trim().toLowerCase()}|${sizeBytes || 0}`;
+}
+
+/** true se o URI aponta para uma cópia dentro do app (seguro apagar ao remover a faixa). */
+export function isAppOwnedUri(uri: string): boolean {
+  return !!uri && !!FileSystem.documentDirectory && uri.startsWith(FileSystem.documentDirectory);
+}
+
+/** Apaga um arquivo que é cópia do app. Não faz nada para URIs externos (SAF). */
+export async function deleteAppFile(uri: string): Promise<void> {
+  if (!isAppOwnedUri(uri)) return;
+  try {
+    await FileSystem.deleteAsync(uri, { idempotent: true });
+  } catch (err) {
+    console.warn('[import] não consegui apagar a cópia:', err);
+  }
+}
 
 async function ensureMusicDir(): Promise<void> {
   try {
@@ -76,6 +102,16 @@ async function uniqueDestination(fileName: string): Promise<string> {
 function toMB(bytes?: number): number {
   if (!bytes || bytes <= 0) return 0;
   return Math.round((bytes / (1024 * 1024)) * 10) / 10;
+}
+
+/** Tamanho em bytes de um URI (0 se não der para saber). */
+async function fileSize(uri: string): Promise<number> {
+  try {
+    const info = await FileSystem.getInfoAsync(uri);
+    return info.exists && info.size ? info.size : 0;
+  } catch {
+    return 0;
+  }
 }
 
 /**
@@ -115,22 +151,16 @@ export async function pickAudioFiles(): Promise<LocalTrackInput[]> {
       console.warn('[import] falha ao copiar; usando URI original:', fileName, err);
     }
 
-    let sizeMB = toMB(asset.size);
-    if (!sizeMB) {
-      try {
-        const info = await FileSystem.getInfoAsync(finalUri);
-        if (info.exists && info.size) sizeMB = toMB(info.size);
-      } catch {
-        /* tamanho é opcional */
-      }
-    }
+    const sizeBytes = asset.size && asset.size > 0 ? asset.size : await fileSize(finalUri);
 
     out.push({
       uri: finalUri,
       title: displayTitleFromFileName(fileName),
       fileName,
       format: formatLabel(fileName),
-      sizeMB,
+      sizeMB: toMB(sizeBytes),
+      sizeBytes,
+      dedupKey: makeDedupKey(fileName, sizeBytes),
       origin: 'file',
       folderPath: 'Arquivos importados',
     });
@@ -167,19 +197,15 @@ export async function pickAudioFolder(): Promise<FolderImportResult | null> {
   const tracks: LocalTrackInput[] = [];
   for (const uri of audioUris) {
     const fileName = fileNameFromUri(uri);
-    let sizeMB = 0;
-    try {
-      const info = await FileSystem.getInfoAsync(uri);
-      if (info.exists && info.size) sizeMB = toMB(info.size);
-    } catch {
-      /* tamanho é opcional para content:// */
-    }
+    const sizeBytes = await fileSize(uri);
     tracks.push({
       uri,
       title: displayTitleFromFileName(fileName),
       fileName,
       format: formatLabel(fileName),
-      sizeMB,
+      sizeMB: toMB(sizeBytes),
+      sizeBytes,
+      dedupKey: makeDedupKey(fileName, sizeBytes),
       origin: 'folder',
       folderPath: folderLabelFromUri(dirUri),
     });
@@ -202,6 +228,144 @@ export function folderLabelFromUri(treeUri: string): string {
   } catch {
     return 'Pasta do dispositivo';
   }
+}
+
+export type DownloadFormat = 'm4a' | 'mp3';
+
+/**
+ * Baixa o áudio de um link (YouTube etc.) através do SEU servidor pessoal
+ * (pasta `server/` deste repo). O servidor usa yt-dlp; o app só faz um GET e
+ * salva o arquivo no diretório do app. Depois disso é 100% offline.
+ *
+ * Lança Error com mensagem legível em qualquer falha (sem servidor configurado,
+ * link inválido, vídeo indisponível, servidor fora do ar...).
+ */
+export async function downloadFromServer(opts: {
+  serverUrl: string;
+  apiKey: string;
+  videoUrl: string;
+  format: DownloadFormat;
+}): Promise<LocalTrackInput> {
+  const base = opts.serverUrl.trim().replace(/\/+$/, '');
+  if (!base) throw new Error('Servidor de download não configurado (veja Configurações).');
+  if (!/^https?:\/\/.+/i.test(base)) throw new Error('URL do servidor inválida.');
+  if (!/^https?:\/\/\S+$/i.test(opts.videoUrl.trim())) throw new Error('Cole um link válido (http/https).');
+
+  await ensureMusicDir();
+
+  const qs =
+    `url=${encodeURIComponent(opts.videoUrl.trim())}` +
+    `&format=${opts.format}` +
+    (opts.apiKey ? `&key=${encodeURIComponent(opts.apiKey)}` : '');
+  const endpoint = `${base}/download?${qs}`;
+  const tmp = `${MUSIC_DIR}dl_${Date.now()}.${opts.format}`;
+
+  let res;
+  try {
+    res = await FileSystem.downloadAsync(endpoint, tmp);
+  } catch (err: any) {
+    throw new Error(
+      `Não foi possível falar com o servidor. Ele pode estar iniciando (plano free "dorme") — tente de novo em 1 min. [${err?.message ?? err}]`
+    );
+  }
+
+  if (res.status !== 200) {
+    let detail = `HTTP ${res.status}`;
+    try {
+      const body = await FileSystem.readAsStringAsync(tmp);
+      const parsed = JSON.parse(body);
+      detail = parsed.error + (parsed.detail ? ` — ${parsed.detail}` : '');
+    } catch {
+      /* corpo não era JSON */
+    }
+    await FileSystem.deleteAsync(tmp, { idempotent: true });
+    throw new Error(detail);
+  }
+
+  const headers: Record<string, string> = (res.headers as any) ?? {};
+  const rawTitle = headers['x-video-title'] ?? headers['X-Video-Title'] ?? '';
+  const title = rawTitle
+    ? safeDecode(rawTitle)
+    : displayTitleFromFileName(tmp, 'Faixa baixada');
+  const durationSec =
+    Number(headers['x-video-duration'] ?? headers['X-Video-Duration'] ?? 0) || 0;
+
+  const fileName = `${safeFileName(title)}.${opts.format}`;
+  const dest = await uniqueDestination(fileName);
+  try {
+    await FileSystem.moveAsync({ from: tmp, to: dest });
+  } catch {
+    // se o move falhar, seguimos com o arquivo temporário mesmo.
+  }
+  const finalUri = (await FileSystem.getInfoAsync(dest)).exists ? dest : tmp;
+  const sizeBytes = await fileSize(finalUri);
+
+  return {
+    uri: finalUri,
+    title,
+    fileName,
+    format: formatLabel(fileName),
+    sizeMB: toMB(sizeBytes),
+    sizeBytes,
+    dedupKey: makeDedupKey(fileName, sizeBytes),
+    origin: 'youtube',
+    folderPath: 'Baixadas',
+    durationSec,
+  };
+}
+
+function safeDecode(s: string): string {
+  try {
+    return decodeURIComponent(s);
+  } catch {
+    return s;
+  }
+}
+
+/** Arquivo recebido pelo "Compartilhar" do sistema (ex.: vindo do NewPipe). */
+export type SharedFile = { path: string; fileName?: string | null; mimeType?: string | null };
+
+/**
+ * Importa arquivos de áudio recebidos via "Compartilhar". Cada arquivo é
+ * copiado para o diretório do app (o URI compartilhado é temporário).
+ */
+export async function copySharedFilesToLibrary(files: SharedFile[]): Promise<LocalTrackInput[]> {
+  const audio = files.filter(
+    (f) => (f.mimeType?.startsWith('audio/') ?? false) || isAudioFile(f.fileName || f.path)
+  );
+  if (audio.length === 0) return [];
+
+  await ensureMusicDir();
+
+  const out: LocalTrackInput[] = [];
+  for (const f of audio) {
+    const name = f.fileName && isAudioFile(f.fileName) ? f.fileName : fileNameFromUri(f.path);
+    if (!isAudioFile(name)) continue;
+
+    let finalUri = f.path;
+    try {
+      const dest = await uniqueDestination(name);
+      await FileSystem.copyAsync({ from: f.path, to: dest });
+      finalUri = dest;
+    } catch (err) {
+      console.warn('[share] falha ao copiar; usando URI original:', name, err);
+    }
+
+    const sizeBytes = await fileSize(finalUri);
+
+    out.push({
+      uri: finalUri,
+      title: displayTitleFromFileName(name),
+      fileName: name,
+      format: formatLabel(name),
+      sizeMB: toMB(sizeBytes),
+      sizeBytes,
+      dedupKey: makeDedupKey(name, sizeBytes),
+      origin: 'file',
+      folderPath: 'Compartilhadas',
+    });
+  }
+  return out;
 }
 
 /** Verifica se o arquivo/URI ainda está acessível (usado no boot e antes de tocar). */

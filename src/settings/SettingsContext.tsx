@@ -22,6 +22,12 @@ type SettingsValue = {
   setFolder: (f: MusicFolder | null) => void;
   defaultFormat: AudioFormat;
   setDefaultFormat: (f: AudioFormat) => void;
+  /** URL base do servidor pessoal de download (pasta `server/`). Vazio = desativado. */
+  downloadServerUrl: string;
+  setDownloadServerUrl: (u: string) => void;
+  /** API_KEY do servidor de download. */
+  downloadServerKey: string;
+  setDownloadServerKey: (k: string) => void;
   /** true depois que as configurações salvas foram carregadas. */
   hydrated: boolean;
 };
@@ -29,26 +35,36 @@ type SettingsValue = {
 type PersistedSettings = {
   folder: MusicFolder | null;
   defaultFormat: AudioFormat;
+  downloadServerUrl: string;
+  downloadServerKey: string;
+};
+
+const DEFAULTS: PersistedSettings = {
+  folder: null,
+  defaultFormat: 'MP3',
+  downloadServerUrl: '',
+  downloadServerKey: '',
 };
 
 const SettingsContext = createContext<SettingsValue | null>(null);
 
 export function SettingsProvider({ children }: { children: React.ReactNode }) {
-  const [folder, setFolderState] = useState<MusicFolder | null>(null);
-  const [defaultFormat, setDefaultFormatState] = useState<AudioFormat>('MP3');
+  const [folder, setFolderState] = useState<MusicFolder | null>(DEFAULTS.folder);
+  const [defaultFormat, setDefaultFormatState] = useState<AudioFormat>(DEFAULTS.defaultFormat);
+  const [downloadServerUrl, setDownloadServerUrlState] = useState(DEFAULTS.downloadServerUrl);
+  const [downloadServerKey, setDownloadServerKeyState] = useState(DEFAULTS.downloadServerKey);
   const [hydrated, setHydrated] = useState(false);
   const hydratedRef = useRef(false);
 
   useEffect(() => {
     let alive = true;
     (async () => {
-      const saved = await loadJSON<PersistedSettings>(STORAGE_KEYS.settings, {
-        folder: null,
-        defaultFormat: 'MP3',
-      });
+      const saved = await loadJSON<PersistedSettings>(STORAGE_KEYS.settings, DEFAULTS);
       if (!alive) return;
       setFolderState(saved.folder ?? null);
       if (saved.defaultFormat) setDefaultFormatState(saved.defaultFormat);
+      setDownloadServerUrlState(saved.downloadServerUrl ?? '');
+      setDownloadServerKeyState(saved.downloadServerKey ?? '');
       hydratedRef.current = true;
       setHydrated(true);
     })();
@@ -59,15 +75,32 @@ export function SettingsProvider({ children }: { children: React.ReactNode }) {
 
   useEffect(() => {
     if (!hydratedRef.current) return;
-    saveJSON(STORAGE_KEYS.settings, { folder, defaultFormat });
-  }, [folder, defaultFormat]);
+    saveJSON(STORAGE_KEYS.settings, {
+      folder,
+      defaultFormat,
+      downloadServerUrl,
+      downloadServerKey,
+    });
+  }, [folder, defaultFormat, downloadServerUrl, downloadServerKey]);
 
   const setFolder = useCallback((f: MusicFolder | null) => setFolderState(f), []);
   const setDefaultFormat = useCallback((f: AudioFormat) => setDefaultFormatState(f), []);
+  const setDownloadServerUrl = useCallback((u: string) => setDownloadServerUrlState(u), []);
+  const setDownloadServerKey = useCallback((k: string) => setDownloadServerKeyState(k), []);
 
   return (
     <SettingsContext.Provider
-      value={{ folder, setFolder, defaultFormat, setDefaultFormat, hydrated }}
+      value={{
+        folder,
+        setFolder,
+        defaultFormat,
+        setDefaultFormat,
+        downloadServerUrl,
+        setDownloadServerUrl,
+        downloadServerKey,
+        setDownloadServerKey,
+        hydrated,
+      }}
     >
       {children}
     </SettingsContext.Provider>

@@ -11,6 +11,11 @@ import React, {
 import { STORAGE_KEYS, loadJSON, saveJSON } from '../storage/persist';
 import {
   LocalTrackInput,
+  SharedFile,
+  copySharedFilesToLibrary,
+  deleteAppFile,
+  downloadFromServer,
+  isAppOwnedUri,
   isUriAvailable,
   pickAudioFiles,
   pickAudioFolder,
@@ -38,6 +43,10 @@ export type DownloadedTrack = {
   durationSec: number;
   format: string;
   sizeMB: number;
+  /** Tamanho exato em bytes (para detectar duplicatas). */
+  sizeBytes?: number;
+  /** Chave de conteúdo (nome do arquivo + bytes) — impede o mesmo arquivo entrar 2x. */
+  dedupKey?: string;
   addedAt: number;
   /** Quantas vezes o usuário reproduziu esta faixa. */
   playCount: number;
@@ -58,8 +67,10 @@ export type ImportResult = {
   duplicates: number;
   /** total de arquivos de áudio encontrados (pasta) */
   found: number;
-  /** 'cancel' | 'denied' | 'empty' | 'error' | null */
-  reason: 'cancel' | 'denied' | 'empty' | 'error' | null;
+  /** motivo da falha, quando `ok` é false */
+  reason: 'cancel' | 'denied' | 'empty' | 'error' | 'noserver' | null;
+  /** mensagem detalhada (usada no download por link) */
+  message?: string;
 };
 
 type LegacyDownloadInput = {
@@ -83,14 +94,21 @@ type LibraryValue = {
   importFiles: () => Promise<ImportResult>;
   /** Importa todos os áudios de uma pasta do dispositivo (SAF, Android). */
   importFolder: () => Promise<ImportResult>;
+  /** Baixa o áudio de um link pelo servidor pessoal e adiciona à biblioteca. */
+  importFromLink: (videoUrl: string) => Promise<ImportResult>;
+  /** Importa arquivos de áudio recebidos via "Compartilhar" (ex.: NewPipe). */
+  importSharedFiles: (files: SharedFile[]) => Promise<ImportResult>;
   /** Reavalia quais faixas ainda têm o arquivo acessível. */
   refreshAvailability: () => Promise<void>;
   /** Grava a duração real assim que o player a descobre. */
   updateTrackDuration: (id: string, durationSec: number) => void;
+  /** Renomeia uma faixa (só o nome exibido; o arquivo no disco não muda). */
+  renameTrack: (id: string, title: string) => void;
   /** Compat: faixa "baixada" pelo downloader legado (simulado). */
   addDownload: (input: LegacyDownloadInput) => DownloadedTrack;
   registerPlay: (id: string) => void;
   addListenedSeconds: (seconds: number) => void;
+  /** Remove a faixa da biblioteca. Apaga o arquivo do disco só se for cópia do app. */
   removeDownload: (id: string) => void;
 };
 
@@ -109,16 +127,18 @@ function inputToTrack(input: LocalTrackInput): DownloadedTrack {
     fileName: input.fileName,
     origin: input.origin,
     folderPath: input.folderPath,
-    durationSec: 0,
+    durationSec: input.durationSec && input.durationSec > 0 ? Math.round(input.durationSec) : 0,
     format: input.format,
     sizeMB: input.sizeMB,
+    sizeBytes: input.sizeBytes,
+    dedupKey: input.dedupKey,
     addedAt: Date.now(),
     playCount: 0,
   };
 }
 
 export function LibraryProvider({ children }: { children: React.ReactNode }) {
-  const { setFolder } = useSettings();
+  const { setFolder, downloadServerUrl, downloadServerKey, defaultFormat } = useSettings();
 
   const [downloads, setDownloads] = useState<DownloadedTrack[]>([]);
   const [totalListenedSec, setTotalListenedSec] = useState(0);
@@ -161,19 +181,34 @@ export function LibraryProvider({ children }: { children: React.ReactNode }) {
   const mergeTracks = useCallback((incoming: DownloadedTrack[]) => {
     let added = 0;
     let duplicates = 0;
+    const orphanCopies: string[] = []; // cópias no app que ficaram órfãs por serem duplicadas
     setDownloads((prev) => {
       const byId = new Map(prev.map((d) => [d.id, d]));
+      const keyToId = new Map(
+        prev.filter((d) => d.dedupKey).map((d) => [d.dedupKey as string, d.id])
+      );
       for (const t of incoming) {
-        if (byId.has(t.id)) {
+        const existingId =
+          (byId.has(t.id) && t.id) ||
+          (t.dedupKey && keyToId.get(t.dedupKey)) ||
+          null;
+
+        if (existingId) {
           duplicates += 1;
-          // Reaparecer = arquivo voltou a existir: limpa o "missing".
-          byId.set(t.id, { ...byId.get(t.id)!, missing: false });
+          const cur = byId.get(existingId)!;
+          byId.set(existingId, { ...cur, missing: false });
+          // Mesmo conteúdo já na biblioteca: descarta a nova cópia do disco.
+          if (t.uri !== cur.uri && isAppOwnedUri(t.uri)) orphanCopies.push(t.uri);
         } else {
           byId.set(t.id, t);
+          if (t.dedupKey) keyToId.set(t.dedupKey, t.id);
           added += 1;
         }
       }
       return Array.from(byId.values()).sort((a, b) => b.addedAt - a.addedAt);
+    });
+    orphanCopies.forEach((uri) => {
+      deleteAppFile(uri).catch(() => undefined);
     });
     return { added, duplicates };
   }, []);
@@ -210,6 +245,59 @@ export function LibraryProvider({ children }: { children: React.ReactNode }) {
     }
   }, [mergeTracks, setFolder]);
 
+  const importFromLink = useCallback<LibraryValue['importFromLink']>(
+    async (videoUrl) => {
+      if (!downloadServerUrl.trim()) {
+        return {
+          ok: false,
+          added: 0,
+          duplicates: 0,
+          found: 0,
+          reason: 'noserver',
+          message: 'Configure o servidor de download em Configurações.',
+        };
+      }
+      try {
+        const input = await downloadFromServer({
+          serverUrl: downloadServerUrl,
+          apiKey: downloadServerKey,
+          videoUrl,
+          format: defaultFormat === 'MP3' ? 'mp3' : 'm4a',
+        });
+        const { added, duplicates } = mergeTracks([inputToTrack(input)]);
+        return { ok: true, added, duplicates, found: 1, reason: null };
+      } catch (err: any) {
+        console.warn('[library] importFromLink falhou:', err);
+        return {
+          ok: false,
+          added: 0,
+          duplicates: 0,
+          found: 0,
+          reason: 'error',
+          message: err?.message ? String(err.message) : 'Falha ao baixar.',
+        };
+      }
+    },
+    [downloadServerUrl, downloadServerKey, defaultFormat, mergeTracks]
+  );
+
+  const importSharedFiles = useCallback<LibraryValue['importSharedFiles']>(
+    async (files) => {
+      try {
+        const inputs = await copySharedFilesToLibrary(files ?? []);
+        if (inputs.length === 0) {
+          return { ok: false, added: 0, duplicates: 0, found: 0, reason: 'empty' };
+        }
+        const { added, duplicates } = mergeTracks(inputs.map(inputToTrack));
+        return { ok: true, added, duplicates, found: inputs.length, reason: null };
+      } catch (err) {
+        console.warn('[library] importSharedFiles falhou:', err);
+        return { ok: false, added: 0, duplicates: 0, found: 0, reason: 'error' };
+      }
+    },
+    [mergeTracks]
+  );
+
   const refreshAvailability = useCallback<LibraryValue['refreshAvailability']>(async () => {
     const current = downloads;
     if (current.length === 0) return;
@@ -230,6 +318,14 @@ export function LibraryProvider({ children }: { children: React.ReactNode }) {
           ? { ...d, durationSec: Math.round(durationSec) }
           : d
       )
+    );
+  }, []);
+
+  const renameTrack = useCallback<LibraryValue['renameTrack']>((id, title) => {
+    const clean = title.trim();
+    if (!clean) return;
+    setDownloads((prev) =>
+      prev.map((d) => (d.id === id ? { ...d, title: clean.slice(0, 200) } : d))
     );
   }, []);
 
@@ -259,7 +355,15 @@ export function LibraryProvider({ children }: { children: React.ReactNode }) {
   }, []);
 
   const removeDownload = useCallback((id: string) => {
-    setDownloads((prev) => prev.filter((d) => d.id !== id));
+    setDownloads((prev) => {
+      const target = prev.find((d) => d.id === id);
+      // Apaga a cópia do disco só quando o arquivo pertence ao app (não mexe
+      // nos arquivos da pasta do usuário / SAF).
+      if (target && isAppOwnedUri(target.uri)) {
+        deleteAppFile(target.uri).catch(() => undefined);
+      }
+      return prev.filter((d) => d.id !== id);
+    });
   }, []);
 
   const stats = useMemo<LibraryStats>(() => {
@@ -278,8 +382,11 @@ export function LibraryProvider({ children }: { children: React.ReactNode }) {
     hydrated,
     importFiles,
     importFolder,
+    importFromLink,
+    importSharedFiles,
     refreshAvailability,
     updateTrackDuration,
+    renameTrack,
     addDownload,
     registerPlay,
     addListenedSeconds,
