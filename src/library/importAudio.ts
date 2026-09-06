@@ -24,7 +24,7 @@ import {
   safeFileName,
 } from '../utils/audioFile';
 
-export type ImportOrigin = 'file' | 'folder';
+export type ImportOrigin = 'file' | 'folder' | 'youtube';
 
 /** Dados de uma faixa local prontos para entrar na biblioteca. */
 export type LocalTrackInput = {
@@ -41,6 +41,8 @@ export type LocalTrackInput = {
   origin: ImportOrigin;
   /** Pasta de origem (rótulo legível) — só informativo. */
   folderPath: string;
+  /** Duração em segundos, quando a origem já informa (ex.: download por link). */
+  durationSec?: number;
 };
 
 /** Diretório do app onde ficam as cópias dos arquivos avulsos importados. */
@@ -201,6 +203,103 @@ export function folderLabelFromUri(treeUri: string): string {
     return tail || 'Pasta do dispositivo';
   } catch {
     return 'Pasta do dispositivo';
+  }
+}
+
+export type DownloadFormat = 'm4a' | 'mp3';
+
+/**
+ * Baixa o áudio de um link (YouTube etc.) através do SEU servidor pessoal
+ * (pasta `server/` deste repo). O servidor usa yt-dlp; o app só faz um GET e
+ * salva o arquivo no diretório do app. Depois disso é 100% offline.
+ *
+ * Lança Error com mensagem legível em qualquer falha (sem servidor configurado,
+ * link inválido, vídeo indisponível, servidor fora do ar...).
+ */
+export async function downloadFromServer(opts: {
+  serverUrl: string;
+  apiKey: string;
+  videoUrl: string;
+  format: DownloadFormat;
+}): Promise<LocalTrackInput> {
+  const base = opts.serverUrl.trim().replace(/\/+$/, '');
+  if (!base) throw new Error('Servidor de download não configurado (veja Configurações).');
+  if (!/^https?:\/\/.+/i.test(base)) throw new Error('URL do servidor inválida.');
+  if (!/^https?:\/\/\S+$/i.test(opts.videoUrl.trim())) throw new Error('Cole um link válido (http/https).');
+
+  await ensureMusicDir();
+
+  const qs =
+    `url=${encodeURIComponent(opts.videoUrl.trim())}` +
+    `&format=${opts.format}` +
+    (opts.apiKey ? `&key=${encodeURIComponent(opts.apiKey)}` : '');
+  const endpoint = `${base}/download?${qs}`;
+  const tmp = `${MUSIC_DIR}dl_${Date.now()}.${opts.format}`;
+
+  let res;
+  try {
+    res = await FileSystem.downloadAsync(endpoint, tmp);
+  } catch (err: any) {
+    throw new Error(
+      `Não foi possível falar com o servidor. Ele pode estar iniciando (plano free "dorme") — tente de novo em 1 min. [${err?.message ?? err}]`
+    );
+  }
+
+  if (res.status !== 200) {
+    let detail = `HTTP ${res.status}`;
+    try {
+      const body = await FileSystem.readAsStringAsync(tmp);
+      const parsed = JSON.parse(body);
+      detail = parsed.error + (parsed.detail ? ` — ${parsed.detail}` : '');
+    } catch {
+      /* corpo não era JSON */
+    }
+    await FileSystem.deleteAsync(tmp, { idempotent: true });
+    throw new Error(detail);
+  }
+
+  const headers: Record<string, string> = (res.headers as any) ?? {};
+  const rawTitle = headers['x-video-title'] ?? headers['X-Video-Title'] ?? '';
+  const title = rawTitle
+    ? safeDecode(rawTitle)
+    : displayTitleFromFileName(tmp, 'Faixa baixada');
+  const durationSec =
+    Number(headers['x-video-duration'] ?? headers['X-Video-Duration'] ?? 0) || 0;
+
+  const fileName = `${safeFileName(title)}.${opts.format}`;
+  const dest = await uniqueDestination(fileName);
+  try {
+    await FileSystem.moveAsync({ from: tmp, to: dest });
+  } catch {
+    // se o move falhar, seguimos com o arquivo temporário mesmo.
+  }
+  const finalUri = (await FileSystem.getInfoAsync(dest)).exists ? dest : tmp;
+
+  let sizeMB = 0;
+  try {
+    const info = await FileSystem.getInfoAsync(finalUri);
+    if (info.exists && info.size) sizeMB = toMB(info.size);
+  } catch {
+    /* tamanho é opcional */
+  }
+
+  return {
+    uri: finalUri,
+    title,
+    fileName,
+    format: formatLabel(fileName),
+    sizeMB,
+    origin: 'youtube',
+    folderPath: 'Baixadas',
+    durationSec,
+  };
+}
+
+function safeDecode(s: string): string {
+  try {
+    return decodeURIComponent(s);
+  } catch {
+    return s;
   }
 }
 

@@ -11,6 +11,7 @@ import React, {
 import { STORAGE_KEYS, loadJSON, saveJSON } from '../storage/persist';
 import {
   LocalTrackInput,
+  downloadFromServer,
   isUriAvailable,
   pickAudioFiles,
   pickAudioFolder,
@@ -58,8 +59,10 @@ export type ImportResult = {
   duplicates: number;
   /** total de arquivos de áudio encontrados (pasta) */
   found: number;
-  /** 'cancel' | 'denied' | 'empty' | 'error' | null */
-  reason: 'cancel' | 'denied' | 'empty' | 'error' | null;
+  /** motivo da falha, quando `ok` é false */
+  reason: 'cancel' | 'denied' | 'empty' | 'error' | 'noserver' | null;
+  /** mensagem detalhada (usada no download por link) */
+  message?: string;
 };
 
 type LegacyDownloadInput = {
@@ -83,6 +86,8 @@ type LibraryValue = {
   importFiles: () => Promise<ImportResult>;
   /** Importa todos os áudios de uma pasta do dispositivo (SAF, Android). */
   importFolder: () => Promise<ImportResult>;
+  /** Baixa o áudio de um link pelo servidor pessoal e adiciona à biblioteca. */
+  importFromLink: (videoUrl: string) => Promise<ImportResult>;
   /** Reavalia quais faixas ainda têm o arquivo acessível. */
   refreshAvailability: () => Promise<void>;
   /** Grava a duração real assim que o player a descobre. */
@@ -109,7 +114,7 @@ function inputToTrack(input: LocalTrackInput): DownloadedTrack {
     fileName: input.fileName,
     origin: input.origin,
     folderPath: input.folderPath,
-    durationSec: 0,
+    durationSec: input.durationSec && input.durationSec > 0 ? Math.round(input.durationSec) : 0,
     format: input.format,
     sizeMB: input.sizeMB,
     addedAt: Date.now(),
@@ -118,7 +123,7 @@ function inputToTrack(input: LocalTrackInput): DownloadedTrack {
 }
 
 export function LibraryProvider({ children }: { children: React.ReactNode }) {
-  const { setFolder } = useSettings();
+  const { setFolder, downloadServerUrl, downloadServerKey, defaultFormat } = useSettings();
 
   const [downloads, setDownloads] = useState<DownloadedTrack[]>([]);
   const [totalListenedSec, setTotalListenedSec] = useState(0);
@@ -210,6 +215,42 @@ export function LibraryProvider({ children }: { children: React.ReactNode }) {
     }
   }, [mergeTracks, setFolder]);
 
+  const importFromLink = useCallback<LibraryValue['importFromLink']>(
+    async (videoUrl) => {
+      if (!downloadServerUrl.trim()) {
+        return {
+          ok: false,
+          added: 0,
+          duplicates: 0,
+          found: 0,
+          reason: 'noserver',
+          message: 'Configure o servidor de download em Configurações.',
+        };
+      }
+      try {
+        const input = await downloadFromServer({
+          serverUrl: downloadServerUrl,
+          apiKey: downloadServerKey,
+          videoUrl,
+          format: defaultFormat === 'MP3' ? 'mp3' : 'm4a',
+        });
+        const { added, duplicates } = mergeTracks([inputToTrack(input)]);
+        return { ok: true, added, duplicates, found: 1, reason: null };
+      } catch (err: any) {
+        console.warn('[library] importFromLink falhou:', err);
+        return {
+          ok: false,
+          added: 0,
+          duplicates: 0,
+          found: 0,
+          reason: 'error',
+          message: err?.message ? String(err.message) : 'Falha ao baixar.',
+        };
+      }
+    },
+    [downloadServerUrl, downloadServerKey, defaultFormat, mergeTracks]
+  );
+
   const refreshAvailability = useCallback<LibraryValue['refreshAvailability']>(async () => {
     const current = downloads;
     if (current.length === 0) return;
@@ -278,6 +319,7 @@ export function LibraryProvider({ children }: { children: React.ReactNode }) {
     hydrated,
     importFiles,
     importFolder,
+    importFromLink,
     refreshAvailability,
     updateTrackDuration,
     addDownload,

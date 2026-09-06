@@ -269,9 +269,19 @@ Passo a passo do que acontece hoje (com a etapa de extração **simulada**):
 | **Persistência** | `AsyncStorage` (`src/storage/persist.ts`): biblioteca, tempo ouvido e pasta escolhida sobrevivem ao fechar/abrir o app. | — |
 | **Arquivo indisponível** | Detectado no boot e antes de tocar (`refreshAvailability`); item marcado como _Indisponível_ e não quebra o app. | — |
 | **Formatos** | MP3, M4A, WAV, AAC, OGG, OPUS, FLAC (detecção por extensão real). | Metadados ID3 (capa, artista). |
-| **Download do YouTube** | Removido — não é possível sem servidor (yt-dlp) e fora do escopo 100% gratuito/offline. | Opcional: backend próprio. |
+| **Download por link (YouTube etc.)** | Opcional, via **servidor pessoal** com yt-dlp (pasta [`server/`](server/README.md)). Configure a URL em Configurações → Servidor de download. Sem servidor, a seção fica escondida. | Frágil por natureza: quando o YouTube muda algo, refaça o deploy do servidor. |
 | **Testes** | Sem testes automatizados. | Jest + React Native Testing Library nos contextos e utils. |
 | **Web** | SAF não existe na web; use "Escolher arquivos". | Refino responsivo se a web for um alvo. |
+
+---
+
+## Servidor de download (opcional)
+
+A pasta [`server/`](server/README.md) tem um serviço pequeno em Node que usa
+**yt-dlp** + **ffmpeg** para baixar o áudio de um link e devolver o arquivo ao app.
+É de **uso pessoal** (baixar do YouTube contraria os Termos deles). Deploy grátis
+no Render via `server/render.yaml`, ou rode localmente com `npm start`. Depois é só
+colar a URL e a `API_KEY` em **Configurações → Servidor de download**.
 
 ---
 

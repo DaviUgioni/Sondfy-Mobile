@@ -1,0 +1,17 @@
+{
+  "name": "sondfy-ytdl-server",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Servidor pessoal que usa yt-dlp para baixar o áudio de um vídeo e devolver o arquivo para o app Sondfy.",
+  "main": "index.js",
+  "type": "commonjs",
+  "scripts": {
+    "start": "node index.js"
+  },
+  "engines": {
+    "node": ">=18"
+  },
+  "dependencies": {
+    "express": "^4.21.2"
+  }
+}

@@ -1,5 +1,5 @@
 import React from 'react';
-import { StyleSheet, Text, View, TouchableOpacity, ScrollView } from 'react-native';
+import { StyleSheet, Text, View, TextInput, TouchableOpacity, ScrollView } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useNavigation } from '@react-navigation/native';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
@@ -14,7 +14,15 @@ type Nav = NativeStackNavigationProp<RootStackParamList, 'Settings'>;
 
 export default function SettingsScreen() {
   const navigation = useNavigation<Nav>();
-  const { folder, defaultFormat, setDefaultFormat } = useSettings();
+  const {
+    folder,
+    defaultFormat,
+    setDefaultFormat,
+    downloadServerUrl,
+    setDownloadServerUrl,
+    downloadServerKey,
+    setDownloadServerKey,
+  } = useSettings();
 
   return (
     <GradientBackground tint={colors.bgGradientTop}>
@@ -64,6 +72,41 @@ export default function SettingsScreen() {
                   );
                 })}
               </View>
+            </View>
+          </Section>
+
+          <Section title="Servidor de download">
+            <View style={[styles.row, styles.rowColumn]}>
+              <Text style={styles.rowLabel}>Endereço (URL)</Text>
+              <TextInput
+                style={styles.textInput}
+                value={downloadServerUrl}
+                onChangeText={setDownloadServerUrl}
+                placeholder="https://seu-servidor.onrender.com"
+                placeholderTextColor={colors.textFaint}
+                autoCapitalize="none"
+                autoCorrect={false}
+                keyboardType="url"
+              />
+            </View>
+            <View style={[styles.row, styles.rowColumn]}>
+              <Text style={styles.rowLabel}>Chave (API_KEY)</Text>
+              <TextInput
+                style={styles.textInput}
+                value={downloadServerKey}
+                onChangeText={setDownloadServerKey}
+                placeholder="opcional, mas recomendado"
+                placeholderTextColor={colors.textFaint}
+                autoCapitalize="none"
+                autoCorrect={false}
+                secureTextEntry
+              />
+            </View>
+            <View style={styles.row}>
+              <Text style={styles.hintText}>
+                Servidor pessoal com yt-dlp (pasta server/ do projeto). Deixe o endereço em branco
+                para esconder o download por link.
+              </Text>
             </View>
           </Section>
 
@@ -128,6 +171,22 @@ const styles = StyleSheet.create({
   rowColumn: { flexDirection: 'column', alignItems: 'stretch', gap: spacing.md },
   rowLeft: { flexDirection: 'row', alignItems: 'center', gap: spacing.md },
   rowLabel: { color: colors.text, ...typography.body },
+  textInput: {
+    backgroundColor: colors.surface,
+    borderRadius: radius.thumb,
+    paddingHorizontal: spacing.md,
+    paddingVertical: spacing.sm,
+    color: colors.text,
+    ...typography.body,
+    fontSize: 14,
+  },
+  hintText: {
+    color: colors.textFaint,
+    ...typography.caption,
+    fontSize: 12,
+    lineHeight: 18,
+    flex: 1,
+  },
   rowRight: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm },
   rowValue: { color: colors.textMuted, ...typography.body },
   segment: {

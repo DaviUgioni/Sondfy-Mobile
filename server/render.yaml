@@ -1,0 +1,14 @@
+# Deploy no Render (https://render.com) — plano free.
+# No painel do Render: New + > Blueprint > aponte para este repositório.
+services:
+  - type: web
+    name: sondfy-ytdl
+    runtime: docker
+    rootDir: server
+    plan: free
+    healthCheckPath: /health
+    envVars:
+      - key: API_KEY
+        generateValue: true   # o Render gera uma chave; copie para o app
+      - key: MAX_DURATION_SEC
+        value: "5400"
