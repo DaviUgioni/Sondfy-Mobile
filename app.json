@@ -1,10 +1,10 @@
 {
   "expo": {
-    "name": "Sondfy-Mobile",
+    "name": "Sondfy",
     "slug": "Sondfy-Mobile",
     "version": "1.0.0",
     "orientation": "portrait",
-    "icon": "./assets/icon.png",
+    "icon": "./assets/sondfy-icon.png",
     "userInterfaceStyle": "light",
     "ios": {
       "supportsTablet": true
@@ -12,10 +12,8 @@
     "android": {
       "package": "com.sondfy.mobile",
       "adaptiveIcon": {
-        "backgroundColor": "#E6F4FE",
-        "foregroundImage": "./assets/android-icon-foreground.png",
-        "backgroundImage": "./assets/android-icon-background.png",
-        "monochromeImage": "./assets/android-icon-monochrome.png"
+        "backgroundColor": "#1ED760",
+        "foregroundImage": "./assets/sondfy-icon.png"
       },
       "predictiveBackGestureEnabled": false
     },
