@@ -1,10 +1,10 @@
 # Sondfy Mobile
 
-Aplicativo mobile (Expo / React Native) para **baixar o áudio de vídeos do YouTube e ouvir offline**, com uma interface escura inspirada no Spotify.
+Aplicativo mobile (Expo / React Native) para **importar e ouvir músicas locais do celular offline**, com uma interface escura inspirada no Spotify.
 
-O app é organizado em **3 telas**: a lista dos arquivos locais baixados, um resumo de estatísticas de uso e um _downloader_ que recebe o link e mostra o progresso. Há ainda um **player em tela cheia** e um **mini player flutuante**.
+O app é organizado em **3 telas**: a lista das músicas da biblioteca, um resumo de estatísticas de uso e uma tela de _importação_ (escolher arquivos ou uma pasta do dispositivo). Há ainda um **player em tela cheia** e um **mini player flutuante**.
 
-> **Estado atual:** a interface e a arquitetura de estado estão completas e funcionais. A extração/download do áudio e a reprodução de áudio real são **simuladas** — veja [Limitações conhecidas](#limitações-conhecidas--roadmap).
+> **Estado atual:** biblioteca musical local funcional. A reprodução usa `expo-audio` (áudio real), a importação usa `expo-document-picker` + Storage Access Framework (`expo-file-system`), e a persistência usa `AsyncStorage`. A antiga aba _Downloader_ do YouTube (que era só simulada, sem baixar nada de fato) foi substituída pela aba **Importar**, já que baixar do YouTube exige um servidor e não é 100% gratuito/offline.
 
 ---
 
@@ -264,14 +264,14 @@ Passo a passo do que acontece hoje (com a etapa de extração **simulada**):
 
 | Área | Situação atual | Próximo passo |
 |---|---|---|
-| **Extração / download** | Simulada (timers). Nenhum arquivo é gravado. | Backend de extração (yt-dlp / `ytdl-core`) + `expo-file-system` para salvar o arquivo. |
-| **Reprodução de áudio** | Linha do tempo simulada com `setInterval`. | Integrar `expo-audio` / `expo-av` e conectar `play/pause/seek/loop` ao player real. |
-| **Persistência** | Estado só em memória — reinicia ao fechar o app. | `AsyncStorage` ou `expo-file-system` para a biblioteca e as preferências. |
-| **Seleção de pasta** | Lista de pastas comuns do Android fixas em `DEVICE_FOLDERS`. | `expo-document-picker` / Storage Access Framework + fluxo de permissão de armazenamento. |
-| **Varredura de arquivos existentes** | Só aparecem faixas baixadas na sessão. | Ler os arquivos de áudio já presentes na pasta escolhida. |
-| **Metadados reais** | `title` = id do vídeo; duração/tamanho estimados. | Puxar título, canal e duração reais na etapa de resolução. |
+| **Reprodução de áudio** | Real, via `expo-audio` (`play/pause/parar/seek/loop`, segue tocando ao trocar de tela, background playback). | — |
+| **Importação** | Real: `expo-document-picker` (arquivos, copiados para o app) e Storage Access Framework via `expo-file-system` (pasta, Android). | Varredura recursiva de subpastas. |
+| **Persistência** | `AsyncStorage` (`src/storage/persist.ts`): biblioteca, tempo ouvido e pasta escolhida sobrevivem ao fechar/abrir o app. | — |
+| **Arquivo indisponível** | Detectado no boot e antes de tocar (`refreshAvailability`); item marcado como _Indisponível_ e não quebra o app. | — |
+| **Formatos** | MP3, M4A, WAV, AAC, OGG, OPUS, FLAC (detecção por extensão real). | Metadados ID3 (capa, artista). |
+| **Download do YouTube** | Removido — não é possível sem servidor (yt-dlp) e fora do escopo 100% gratuito/offline. | Opcional: backend próprio. |
 | **Testes** | Sem testes automatizados. | Jest + React Native Testing Library nos contextos e utils. |
-| **Web** | Compila, mas o layout não foi ajustado para telas largas. | Refino responsivo se a plataforma web for um alvo. |
+| **Web** | SAF não existe na web; use "Escolher arquivos". | Refino responsivo se a web for um alvo. |
 
 ---
 

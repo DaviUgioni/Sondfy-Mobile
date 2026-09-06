@@ -1,7 +1,7 @@
 import React from 'react';
 import { View, Text, TouchableOpacity, StyleSheet } from 'react-native';
 import { colors, spacing, radius, typography } from '../theme';
-import { PlayIcon, PauseIcon, LoopIcon } from './Icon';
+import { PlayIcon, PauseIcon, LoopIcon, PlusIcon } from './Icon';
 import CoverArt from './CoverArt';
 import EqualizerBars from './EqualizerBars';
 import { formatTime } from '../utils/time';
@@ -15,6 +15,8 @@ type Props = {
   progress: number;
   onTogglePlay: () => void;
   onToggleLoop: () => void;
+  /** Para a música e fecha o mini player. */
+  onDismiss?: () => void;
   onPress?: () => void;
 };
 
@@ -26,6 +28,7 @@ export default function MiniPlayer({
   progress,
   onTogglePlay,
   onToggleLoop,
+  onDismiss,
   onPress,
 }: Props) {
   return (
@@ -37,7 +40,9 @@ export default function MiniPlayer({
             {track.title}
           </Text>
           <Text style={styles.artist} numberOfLines={1}>
-            {track.format} · {formatTime(track.durationSec)}
+            {track.missing
+              ? 'Arquivo indisponível'
+              : `${track.format} · ${track.durationSec ? formatTime(track.durationSec) : '—'}`}
           </Text>
         </View>
 
@@ -54,6 +59,14 @@ export default function MiniPlayer({
         <TouchableOpacity style={styles.playBtn} onPress={onTogglePlay} hitSlop={8}>
           {playing ? <PauseIcon size={16} /> : <PlayIcon size={16} />}
         </TouchableOpacity>
+
+        {onDismiss && (
+          <TouchableOpacity style={styles.closeBtn} onPress={onDismiss} hitSlop={8}>
+            <View style={{ transform: [{ rotate: '45deg' }] }}>
+              <PlusIcon size={16} color={colors.textMuted} />
+            </View>
+          </TouchableOpacity>
+        )}
       </View>
 
       <View style={styles.progressTrack}>
@@ -95,6 +108,12 @@ const styles = StyleSheet.create({
   loopBtnActive: { backgroundColor: colors.primary },
   playBtn: {
     width: 32,
+    height: 32,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  closeBtn: {
+    width: 28,
     height: 32,
     alignItems: 'center',
     justifyContent: 'center',

@@ -3,7 +3,7 @@ import { View, Text, TouchableOpacity, StyleSheet } from 'react-native';
 import { colors, spacing, typography, layout } from '../theme';
 import { ListIcon, StatsIcon, DownloadIcon } from './Icon';
 
-export type TabKey = 'principal' | 'estatisticas' | 'downloader';
+export type TabKey = 'principal' | 'estatisticas' | 'importar';
 
 type Props = {
   active: TabKey;
@@ -13,7 +13,7 @@ type Props = {
 const TABS: { key: TabKey; label: string; Icon: typeof ListIcon }[] = [
   { key: 'principal', label: 'Músicas', Icon: ListIcon },
   { key: 'estatisticas', label: 'Estatísticas', Icon: StatsIcon },
-  { key: 'downloader', label: 'Downloader', Icon: DownloadIcon },
+  { key: 'importar', label: 'Importar', Icon: DownloadIcon },
 ];
 
 /** Barra de navegação inferior fixa, fundo preto translúcido. */
