@@ -21,6 +21,12 @@
     },
     "web": {
       "favicon": "./assets/favicon.png"
-    }
+    },
+    "extra": {
+      "eas": {
+        "projectId": "573c8f78-4971-45b3-80ec-fb1d1dbeed87"
+      }
+    },
+    "owner": "ugioni"
   }
 }
