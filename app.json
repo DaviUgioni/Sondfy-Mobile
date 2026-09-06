@@ -13,7 +13,7 @@
       "package": "com.sondfy.mobile",
       "adaptiveIcon": {
         "backgroundColor": "#1ED760",
-        "foregroundImage": "./assets/sondfy-icon.png"
+        "foregroundImage": "./assets/sondfy-icon-adaptive.png"
       },
       "predictiveBackGestureEnabled": false
     },
