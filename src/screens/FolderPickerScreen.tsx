@@ -1,16 +1,69 @@
-import React from 'react';
-import { View, Text, TouchableOpacity, ScrollView, StyleSheet } from 'react-native';
+import React, { useState } from 'react';
+import { View, Text, TouchableOpacity, ScrollView, Platform, StyleSheet } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useNavigation } from '@react-navigation/native';
 
 import { colors, spacing, radius, typography } from '../theme';
 import GradientBackground from '../components/GradientBackground';
-import { ChevronRight, CheckIcon, FolderIcon } from '../components/Icon';
-import { DEVICE_FOLDERS, useSettings } from '../settings/SettingsContext';
+import { ChevronRight, FolderIcon, DownloadIcon } from '../components/Icon';
+import { useSettings } from '../settings/SettingsContext';
+import { useLibrary, ImportResult } from '../library/LibraryContext';
 
+/**
+ * Escolha real de pasta/arquivos do armazenamento do dispositivo.
+ * Android: Storage Access Framework (permissão da árvore persistida pelo SO).
+ * iOS: seletor de arquivos do sistema (permite navegar entre pastas).
+ */
 export default function FolderPickerScreen() {
   const navigation = useNavigation();
-  const { folder, setFolder } = useSettings();
+  const { folder } = useSettings();
+  const { importFolder, importFiles, refreshAvailability, downloads } = useLibrary();
+  const [busy, setBusy] = useState<null | 'folder' | 'files' | 'check'>(null);
+  const [status, setStatus] = useState<string | null>(null);
+
+  const describe = (r: ImportResult): string => {
+    if (r.ok) {
+      if (r.added === 0) return `Nada novo — ${r.duplicates} já estava(m) na biblioteca.`;
+      return `${r.added} música(s) adicionada(s)${r.duplicates ? ` (${r.duplicates} repetida(s))` : ''}.`;
+    }
+    switch (r.reason) {
+      case 'cancel':
+        return 'Seleção cancelada.';
+      case 'denied':
+        return 'Permissão da pasta não concedida.';
+      case 'empty':
+        return 'Nenhum arquivo de áudio compatível nessa pasta.';
+      default:
+        return 'Não foi possível importar.';
+    }
+  };
+
+  const run = async (kind: 'folder' | 'files') => {
+    if (busy) return;
+    setBusy(kind);
+    setStatus('Abrindo o seletor…');
+    try {
+      const res = kind === 'folder' ? await importFolder() : await importFiles();
+      setStatus(describe(res));
+    } catch {
+      setStatus('Não foi possível importar.');
+    } finally {
+      setBusy(null);
+    }
+  };
+
+  const recheck = async () => {
+    if (busy) return;
+    setBusy('check');
+    setStatus('Verificando arquivos…');
+    try {
+      await refreshAvailability();
+      const missing = downloads.filter((d) => d.missing).length;
+      setStatus(missing ? `${missing} arquivo(s) indisponível(is).` : 'Todos os arquivos estão acessíveis.');
+    } finally {
+      setBusy(null);
+    }
+  };
 
   return (
     <GradientBackground tint={colors.bgGradientTop}>
@@ -27,45 +80,60 @@ export default function FolderPickerScreen() {
 
         <ScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
           <Text style={styles.intro}>
-            Escolha a pasta do celular que o Sondfy usa. Novos downloads são salvos nela e o
-            conteúdo dela aparece na tela Suas músicas.
+            Escolha uma pasta do seu celular com músicas, ou selecione arquivos avulsos. O Sondfy
+            importa os áudios, guarda os nomes e mantém tudo disponível ao reabrir o app.
           </Text>
 
           <View style={styles.card}>
-            {DEVICE_FOLDERS.map((f, i) => {
-              const selected = f.id === folder.id;
-              return (
-                <TouchableOpacity
-                  key={f.id}
-                  style={[styles.row, i > 0 && styles.rowDivider]}
-                  activeOpacity={0.7}
-                  onPress={() => {
-                    setFolder(f);
-                    navigation.goBack();
-                  }}
-                >
-                  <FolderIcon size={20} active={selected} color={selected ? colors.primary : colors.textMuted} />
-                  <View style={styles.rowText}>
-                    <Text style={[styles.folderName, selected && { color: colors.primary }]}>
-                      {f.label}
-                    </Text>
-                    <Text style={styles.folderPath} numberOfLines={1}>
-                      {f.path}
-                    </Text>
-                  </View>
-                  {selected && (
-                    <View style={styles.check}>
-                      <CheckIcon size={14} color={colors.black} thickness={2.5} />
-                    </View>
-                  )}
-                </TouchableOpacity>
-              );
-            })}
+            <Text style={styles.cardLabel}>Pasta atual</Text>
+            <Text style={styles.cardValue} numberOfLines={1}>
+              {folder?.label ?? 'Nenhuma pasta escolhida'}
+            </Text>
           </View>
 
+          {Platform.OS === 'android' && (
+            <TouchableOpacity
+              style={[styles.action, busy === 'folder' && styles.actionBusy]}
+              activeOpacity={0.85}
+              onPress={() => run('folder')}
+              disabled={!!busy}
+            >
+              <FolderIcon size={18} color={colors.primary} />
+              <Text style={styles.actionText}>
+                {busy === 'folder' ? 'Abrindo…' : 'Escolher pasta do dispositivo'}
+              </Text>
+            </TouchableOpacity>
+          )}
+
+          <TouchableOpacity
+            style={[styles.action, busy === 'files' && styles.actionBusy]}
+            activeOpacity={0.85}
+            onPress={() => run('files')}
+            disabled={!!busy}
+          >
+            <DownloadIcon size={18} active color={colors.primary} />
+            <Text style={styles.actionText}>
+              {busy === 'files' ? 'Abrindo…' : 'Escolher arquivos'}
+            </Text>
+          </TouchableOpacity>
+
+          <TouchableOpacity
+            style={[styles.action, busy === 'check' && styles.actionBusy]}
+            activeOpacity={0.85}
+            onPress={recheck}
+            disabled={!!busy}
+          >
+            <Text style={styles.actionText}>
+              {busy === 'check' ? 'Verificando…' : 'Reverificar arquivos'}
+            </Text>
+          </TouchableOpacity>
+
+          {status && <Text style={styles.status}>{status}</Text>}
+
           <Text style={styles.note}>
-            O Sondfy pede permissão de acesso ao armazenamento na primeira vez que você abre uma
-            pasta.
+            {Platform.OS === 'android'
+              ? 'Ao escolher uma pasta, o Android registra a permissão de acesso — as músicas continuam disponíveis nas próximas vezes. Arquivos avulsos são copiados para o app.'
+              : 'Os arquivos escolhidos são copiados para o app, garantindo acesso mesmo depois de reiniciar.'}
           </Text>
         </ScrollView>
       </SafeAreaView>
@@ -92,26 +160,38 @@ const styles = StyleSheet.create({
     lineHeight: 19,
     marginBottom: spacing.lg,
   },
-  card: { backgroundColor: colors.card, borderRadius: radius.card, overflow: 'hidden' },
-  row: {
+  card: {
+    backgroundColor: colors.card,
+    borderRadius: radius.card,
+    padding: spacing.lg,
+    marginBottom: spacing.lg,
+    gap: spacing.xs,
+  },
+  cardLabel: {
+    color: colors.textFaint,
+    ...typography.caption,
+    textTransform: 'uppercase',
+    letterSpacing: 0.6,
+  },
+  cardValue: { color: colors.text, ...typography.body },
+  action: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: spacing.md,
-    paddingHorizontal: spacing.lg,
-    paddingVertical: spacing.lg,
-    minHeight: 60,
-  },
-  rowDivider: { borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: colors.border },
-  rowText: { flex: 1 },
-  folderName: { color: colors.text, ...typography.body },
-  folderPath: { color: colors.textFaint, ...typography.caption, fontSize: 11, marginTop: 2 },
-  check: {
-    width: 22,
-    height: 22,
-    borderRadius: 11,
-    backgroundColor: colors.primary,
-    alignItems: 'center',
     justifyContent: 'center',
+    gap: spacing.sm,
+    height: 50,
+    marginBottom: spacing.md,
+    borderRadius: radius.pill,
+    borderWidth: 1.5,
+    borderColor: colors.primary,
+  },
+  actionBusy: { opacity: 0.6 },
+  actionText: { color: colors.primary, ...typography.pill, fontSize: 14 },
+  status: {
+    color: colors.text,
+    ...typography.body,
+    marginTop: spacing.sm,
+    marginBottom: spacing.sm,
   },
   note: {
     color: colors.textFaint,

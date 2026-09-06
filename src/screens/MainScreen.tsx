@@ -10,7 +10,7 @@ import MiniPlayer from '../components/MiniPlayer';
 import BottomNav, { TabKey } from '../components/BottomNav';
 import HomeTab from './tabs/HomeTab';
 import StatsTab from './tabs/StatsTab';
-import DownloaderTab from './tabs/DownloaderTab';
+import ImportTab from './tabs/ImportTab';
 import { usePlayer } from '../player/PlayerContext';
 
 type RootStackParamList = { Main: undefined; Settings: undefined; Player: undefined };
@@ -27,12 +27,12 @@ export default function MainScreen() {
         <View style={styles.body}>
           {tab === 'principal' && (
             <HomeTab
-              onOpenDownloader={() => setTab('downloader')}
+              onOpenImport={() => setTab('importar')}
               onOpenSettings={() => navigation.navigate('Settings')}
             />
           )}
           {tab === 'estatisticas' && <StatsTab />}
-          {tab === 'downloader' && <DownloaderTab />}
+          {tab === 'importar' && <ImportTab />}
         </View>
       </SafeAreaView>
 
@@ -46,6 +46,7 @@ export default function MainScreen() {
             progress={player.progress}
             onTogglePlay={player.togglePlay}
             onToggleLoop={player.toggleLoop}
+            onDismiss={player.dismiss}
             onPress={() => navigation.navigate('Player')}
           />
         )}

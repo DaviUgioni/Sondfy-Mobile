@@ -1,26 +1,27 @@
 import React, { useEffect, useMemo, useRef } from 'react';
-import { View, Text, TouchableOpacity, ScrollView, StyleSheet } from 'react-native';
+import { View, Text, TouchableOpacity, ScrollView, StyleSheet, Alert } from 'react-native';
 import { colors, spacing, typography, layout } from '../../theme';
 import CoverArt from '../../components/CoverArt';
 import QualityTag from '../../components/QualityTag';
 import EqualizerBars from '../../components/EqualizerBars';
 import EmptyState from '../../components/EmptyState';
-import { DownloadedBadge, GearIcon, PlayIcon, FolderIcon } from '../../components/Icon';
+import { DownloadedBadge, GearIcon, PlayIcon, FolderIcon, PlusIcon } from '../../components/Icon';
 import { useLibrary } from '../../library/LibraryContext';
 import { usePlayer } from '../../player/PlayerContext';
 import { useSettings } from '../../settings/SettingsContext';
 import { formatTime } from '../../utils/time';
 
 type Props = {
-  onOpenDownloader: () => void;
+  onOpenImport: () => void;
   onOpenSettings: () => void;
 };
 
-export default function HomeTab({ onOpenDownloader, onOpenSettings }: Props) {
+export default function HomeTab({ onOpenImport, onOpenSettings }: Props) {
   const { downloads } = useLibrary();
   const { track: current, playing, playTrack } = usePlayer();
   const { folder } = useSettings();
   const listRef = useRef<ScrollView>(null);
+  const folderLabel = folder?.label ?? 'Dispositivo';
 
   // Mais recente sempre no topo.
   const ordered = useMemo(
@@ -42,7 +43,7 @@ export default function HomeTab({ onOpenDownloader, onOpenSettings }: Props) {
           <View style={styles.folderRow}>
             <FolderIcon size={13} color={colors.textMuted} />
             <Text style={styles.subtitle} numberOfLines={1}>
-              {folder.label}
+              {folderLabel}
               {'  ·  '}
               {downloads.length === 0
                 ? 'nenhuma música'
@@ -50,6 +51,9 @@ export default function HomeTab({ onOpenDownloader, onOpenSettings }: Props) {
             </Text>
           </View>
         </View>
+        <TouchableOpacity onPress={onOpenImport} hitSlop={8} style={styles.gear}>
+          <PlusIcon size={22} color={colors.text} />
+        </TouchableOpacity>
         <TouchableOpacity onPress={onOpenSettings} hitSlop={8} style={styles.gear}>
           <GearIcon size={22} />
         </TouchableOpacity>
@@ -57,10 +61,10 @@ export default function HomeTab({ onOpenDownloader, onOpenSettings }: Props) {
 
       {ordered.length === 0 ? (
         <EmptyState
-          title="Nenhuma música no dispositivo"
-          message={`Nada em ${folder.label} ainda. Cole um link do YouTube na aba Downloader para baixar sua primeira música.`}
-          actionLabel="Abrir Downloader"
-          onAction={onOpenDownloader}
+          title="Nenhuma música ainda"
+          message="Importe músicas que já estão no seu celular: escolha arquivos ou uma pasta do dispositivo."
+          actionLabel="Importar músicas"
+          onAction={onOpenImport}
         />
       ) : (
         <ScrollView
@@ -70,31 +74,59 @@ export default function HomeTab({ onOpenDownloader, onOpenSettings }: Props) {
         >
           {ordered.map((t) => {
             const isCurrent = current?.id === t.id;
+            const onPress = () => {
+              if (t.missing) {
+                Alert.alert(
+                  'Arquivo indisponível',
+                  `"${t.title}" foi movido ou removido do dispositivo. Reimporte o arquivo ou a pasta para ouvir de novo.`
+                );
+                return;
+              }
+              playTrack(t);
+            };
             return (
               <TouchableOpacity
                 key={t.id}
                 style={styles.row}
                 activeOpacity={0.7}
-                onPress={() => playTrack(t)}
+                onPress={onPress}
               >
                 <CoverArt uri={t.thumbnailUrl} size={52} />
                 <View style={styles.info}>
                   <View style={styles.titleLine}>
-                    <DownloadedBadge size={13} />
+                    {!t.missing && <DownloadedBadge size={13} />}
                     <Text
-                      style={[styles.rowTitle, isCurrent && { color: colors.primary }]}
+                      style={[
+                        styles.rowTitle,
+                        isCurrent && !t.missing && { color: colors.primary },
+                        t.missing && { color: colors.textFaint },
+                      ]}
                       numberOfLines={1}
                     >
                       {t.title}
                     </Text>
                   </View>
                   <View style={styles.metaLine}>
-                    <Text style={styles.meta}>{formatTime(t.durationSec)}</Text>
-                    <QualityTag value={t.format} />
-                    <Text style={styles.meta}>{t.sizeMB.toFixed(1)} MB</Text>
+                    {t.missing ? (
+                      <Text style={[styles.meta, { color: '#E24A4A' }]}>Indisponível</Text>
+                    ) : (
+                      <>
+                        <Text style={styles.meta}>
+                          {t.durationSec ? formatTime(t.durationSec) : '—'}
+                        </Text>
+                        <QualityTag value={t.format} />
+                        {t.sizeMB > 0 && (
+                          <Text style={styles.meta}>{t.sizeMB.toFixed(1)} MB</Text>
+                        )}
+                      </>
+                    )}
                   </View>
                 </View>
-                {isCurrent ? (
+                {t.missing ? (
+                  <View style={styles.playHint}>
+                    <Text style={{ color: colors.textFaint, fontSize: 14 }}>!</Text>
+                  </View>
+                ) : isCurrent ? (
                   <EqualizerBars playing={playing} size={16} />
                 ) : (
                   <View style={styles.playHint}>

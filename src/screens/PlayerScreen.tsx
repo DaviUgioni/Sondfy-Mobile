@@ -72,7 +72,10 @@ export default function PlayerScreen() {
           <View style={styles.subRow}>
             <DownloadedBadge size={14} />
             <Text style={styles.sub} numberOfLines={1}>
-              {formatTime(track.durationSec)} · {track.sizeMB.toFixed(1)} MB
+              {(durationSec || track.durationSec)
+                ? formatTime(durationSec || track.durationSec)
+                : '—'}
+              {track.sizeMB > 0 ? ` · ${track.sizeMB.toFixed(1)} MB` : ''}
             </Text>
             <QualityTag value={track.format} />
           </View>

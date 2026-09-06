@@ -30,7 +30,7 @@ export default function SettingsScreen() {
         </View>
 
         <ScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
-          <Section title="Downloads">
+          <Section title="Biblioteca">
             <TouchableOpacity
               style={styles.row}
               activeOpacity={0.7}
@@ -41,13 +41,15 @@ export default function SettingsScreen() {
                 <Text style={styles.rowLabel}>Pasta no dispositivo</Text>
               </View>
               <View style={styles.rowRight}>
-                <Text style={styles.rowValue}>{folder.label}</Text>
+                <Text style={styles.rowValue} numberOfLines={1}>
+                  {folder?.label ?? 'Nenhuma'}
+                </Text>
                 <ChevronRight />
               </View>
             </TouchableOpacity>
 
             <View style={[styles.row, styles.rowColumn]}>
-              <Text style={styles.rowLabel}>Formato padrão do download</Text>
+              <Text style={styles.rowLabel}>Formato preferido</Text>
               <View style={styles.segment}>
                 {AUDIO_FORMATS.map((f) => {
                   const active = f === defaultFormat;
