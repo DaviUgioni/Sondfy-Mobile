@@ -179,6 +179,10 @@ export default function ImportTab() {
           </Text>
         )}
         <Text style={styles.infoLineMuted}>Formatos aceitos: MP3, M4A, WAV, AAC, OGG, OPUS, FLAC.</Text>
+        <Text style={styles.infoLineFaint}>
+          Dica: em apps como o NewPipe, use "Compartilhar → Sondfy" para enviar o áudio direto
+          para a biblioteca.
+        </Text>
         {Platform.OS === 'android' && (
           <Text style={styles.infoLineFaint}>
             Ao escolher uma pasta, o Android guarda a permissão de acesso — as músicas continuam

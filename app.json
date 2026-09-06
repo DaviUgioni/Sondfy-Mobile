@@ -4,6 +4,7 @@
     "slug": "Sondfy-Mobile",
     "version": "1.0.0",
     "orientation": "portrait",
+    "scheme": "sondfy",
     "icon": "./assets/sondfy-icon.png",
     "userInterfaceStyle": "light",
     "ios": {
@@ -33,7 +34,14 @@
           "recordAudioAndroid": false
         }
       ],
-      "expo-asset"
+      "expo-asset",
+      [
+        "expo-share-intent",
+        {
+          "androidIntentFilters": ["audio/*"],
+          "disableIOS": true
+        }
+      ]
     ]
   }
 }

@@ -303,6 +303,56 @@ function safeDecode(s: string): string {
   }
 }
 
+/** Arquivo recebido pelo "Compartilhar" do sistema (ex.: vindo do NewPipe). */
+export type SharedFile = { path: string; fileName?: string | null; mimeType?: string | null };
+
+/**
+ * Importa arquivos de áudio recebidos via "Compartilhar". Cada arquivo é
+ * copiado para o diretório do app (o URI compartilhado é temporário).
+ */
+export async function copySharedFilesToLibrary(files: SharedFile[]): Promise<LocalTrackInput[]> {
+  const audio = files.filter(
+    (f) => (f.mimeType?.startsWith('audio/') ?? false) || isAudioFile(f.fileName || f.path)
+  );
+  if (audio.length === 0) return [];
+
+  await ensureMusicDir();
+
+  const out: LocalTrackInput[] = [];
+  for (const f of audio) {
+    const name = f.fileName && isAudioFile(f.fileName) ? f.fileName : fileNameFromUri(f.path);
+    if (!isAudioFile(name)) continue;
+
+    let finalUri = f.path;
+    try {
+      const dest = await uniqueDestination(name);
+      await FileSystem.copyAsync({ from: f.path, to: dest });
+      finalUri = dest;
+    } catch (err) {
+      console.warn('[share] falha ao copiar; usando URI original:', name, err);
+    }
+
+    let sizeMB = 0;
+    try {
+      const info = await FileSystem.getInfoAsync(finalUri);
+      if (info.exists && info.size) sizeMB = toMB(info.size);
+    } catch {
+      /* tamanho é opcional */
+    }
+
+    out.push({
+      uri: finalUri,
+      title: displayTitleFromFileName(name),
+      fileName: name,
+      format: formatLabel(name),
+      sizeMB,
+      origin: 'file',
+      folderPath: 'Compartilhadas',
+    });
+  }
+  return out;
+}
+
 /** Verifica se o arquivo/URI ainda está acessível (usado no boot e antes de tocar). */
 export async function isUriAvailable(uri: string): Promise<boolean> {
   if (!uri) return false;

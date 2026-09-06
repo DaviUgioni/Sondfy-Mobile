@@ -11,6 +11,8 @@ import React, {
 import { STORAGE_KEYS, loadJSON, saveJSON } from '../storage/persist';
 import {
   LocalTrackInput,
+  SharedFile,
+  copySharedFilesToLibrary,
   downloadFromServer,
   isUriAvailable,
   pickAudioFiles,
@@ -88,6 +90,8 @@ type LibraryValue = {
   importFolder: () => Promise<ImportResult>;
   /** Baixa o áudio de um link pelo servidor pessoal e adiciona à biblioteca. */
   importFromLink: (videoUrl: string) => Promise<ImportResult>;
+  /** Importa arquivos de áudio recebidos via "Compartilhar" (ex.: NewPipe). */
+  importSharedFiles: (files: SharedFile[]) => Promise<ImportResult>;
   /** Reavalia quais faixas ainda têm o arquivo acessível. */
   refreshAvailability: () => Promise<void>;
   /** Grava a duração real assim que o player a descobre. */
@@ -251,6 +255,23 @@ export function LibraryProvider({ children }: { children: React.ReactNode }) {
     [downloadServerUrl, downloadServerKey, defaultFormat, mergeTracks]
   );
 
+  const importSharedFiles = useCallback<LibraryValue['importSharedFiles']>(
+    async (files) => {
+      try {
+        const inputs = await copySharedFilesToLibrary(files ?? []);
+        if (inputs.length === 0) {
+          return { ok: false, added: 0, duplicates: 0, found: 0, reason: 'empty' };
+        }
+        const { added, duplicates } = mergeTracks(inputs.map(inputToTrack));
+        return { ok: true, added, duplicates, found: inputs.length, reason: null };
+      } catch (err) {
+        console.warn('[library] importSharedFiles falhou:', err);
+        return { ok: false, added: 0, duplicates: 0, found: 0, reason: 'error' };
+      }
+    },
+    [mergeTracks]
+  );
+
   const refreshAvailability = useCallback<LibraryValue['refreshAvailability']>(async () => {
     const current = downloads;
     if (current.length === 0) return;
@@ -320,6 +341,7 @@ export function LibraryProvider({ children }: { children: React.ReactNode }) {
     importFiles,
     importFolder,
     importFromLink,
+    importSharedFiles,
     refreshAvailability,
     updateTrackDuration,
     addDownload,

@@ -269,7 +269,8 @@ Passo a passo do que acontece hoje (com a etapa de extração **simulada**):
 | **Persistência** | `AsyncStorage` (`src/storage/persist.ts`): biblioteca, tempo ouvido e pasta escolhida sobrevivem ao fechar/abrir o app. | — |
 | **Arquivo indisponível** | Detectado no boot e antes de tocar (`refreshAvailability`); item marcado como _Indisponível_ e não quebra o app. | — |
 | **Formatos** | MP3, M4A, WAV, AAC, OGG, OPUS, FLAC (detecção por extensão real). | Metadados ID3 (capa, artista). |
-| **Download por link (YouTube etc.)** | Opcional, via **servidor pessoal** com yt-dlp (pasta [`server/`](server/README.md)). Configure a URL em Configurações → Servidor de download. Sem servidor, a seção fica escondida. | Frágil por natureza: quando o YouTube muda algo, refaça o deploy do servidor. |
+| **Trazer músicas de outros apps** | **Compartilhar → Sondfy**: qualquer app que compartilhe um arquivo de áudio (ex.: **NewPipe**) manda direto para a biblioteca (via `expo-share-intent`). Robusto — quem lida com o YouTube é o outro app. | — |
+| **Download por link dentro do app** | Opcional, via **servidor pessoal** com yt-dlp (pasta [`server/`](server/README.md)). Configure a URL em Configurações → Servidor de download. Sem servidor, a seção fica escondida. | Frágil: quando o YouTube muda algo, refaça o deploy do servidor. |
 | **Testes** | Sem testes automatizados. | Jest + React Native Testing Library nos contextos e utils. |
 | **Web** | SAF não existe na web; use "Escolher arquivos". | Refino responsivo se a web for um alvo. |
 
